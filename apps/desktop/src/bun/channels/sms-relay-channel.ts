@@ -10,7 +10,26 @@ import type {
 	MessageChannel,
 	SendMessageInput,
 	SendMessageResult,
+	WaitUntilSentOpts,
 } from "./types";
+
+const DEFAULT_POLL_MS = 1_500;
+const DEFAULT_TIMEOUT_MS = 120_000;
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+	return new Promise((resolve, reject) => {
+		if (signal?.aborted) {
+			reject(new Error("SMS job wait aborted"));
+			return;
+		}
+		const timer = setTimeout(resolve, ms);
+		const onAbort = () => {
+			clearTimeout(timer);
+			reject(new Error("SMS job wait aborted"));
+		};
+		signal?.addEventListener("abort", onAbort, { once: true });
+	});
+}
 
 type ErrorEnvelope = {
 	error?: { code?: string; message?: string };
@@ -96,9 +115,8 @@ async function relayFetch<T>(
 /**
  * SMS relay channel.
  *
- * When `SMS_RELAY_BASE_URL` (and stored URL) are unset, uses an in-memory mock
- * that accepts jobs immediately. Phase 1 treats enqueue/mock accept as sent;
- * `waitUntilSent` is a stub until Phase 2 polls phone ack.
+ * When `SMS_RELAY_BASE_URL` (and stored URL) are unset, uses an in-memory mock.
+ * Live `send` only enqueues; callers must `waitUntilSent` until the phone acks.
  */
 export class SmsRelayChannel implements MessageChannel {
 	readonly kind = "sms" as const;
@@ -141,22 +159,52 @@ export class SmsRelayChannel implements MessageChannel {
 	}
 
 	/**
-	 * Phase 2: poll GET /v1/jobs/{jobId} until sent|failed.
-	 * Phase 1 stub — scheduler marks sent after enqueue/mock.
+	 * Poll GET /v1/jobs/{jobId} until status is sent or failed.
+	 * Does not treat enqueue as delivery — phone must ack.
 	 */
 	async waitUntilSent(
 		remoteJobId: string,
-		_opts?: { signal?: AbortSignal },
+		opts?: WaitUntilSentOpts,
 	): Promise<void> {
 		if (isSmsMockMode()) {
 			const job = mockJobs.get(remoteJobId);
-			if (job?.status === "failed") {
+			if (!job) {
+				throw new Error(`unknown mock SMS job ${remoteJobId}`);
+			}
+			if (job.status === "failed") {
 				throw new Error("mock SMS job failed");
 			}
 			return;
 		}
-		// Phase 2 will poll here; intentionally no-op in Phase 1.
-		void remoteJobId;
+
+		const pollMs = opts?.pollIntervalMs ?? DEFAULT_POLL_MS;
+		const timeoutMs = opts?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+		const started = Date.now();
+
+		while (true) {
+			if (opts?.signal?.aborted) {
+				throw new Error("SMS job wait aborted");
+			}
+
+			const snapshot = await getSmsJobStatus(remoteJobId);
+			if (!snapshot) {
+				throw new Error(`SMS job not found (${remoteJobId})`);
+			}
+			if (snapshot.status === "sent") return;
+			if (snapshot.status === "failed") {
+				throw new Error(
+					snapshot.error?.trim() || "SMS send failed on phone",
+				);
+			}
+
+			if (Date.now() - started > timeoutMs) {
+				throw new Error(
+					`SMS job timed out waiting for phone ack (${remoteJobId})`,
+				);
+			}
+
+			await sleep(pollMs, opts?.signal);
+		}
 	}
 }
 
@@ -287,7 +335,6 @@ export async function unpairSms(): Promise<SmsRelayStoredState> {
 	return clearSmsRelayState();
 }
 
-/** Live poll helper reserved for Phase 2 waitUntilSent. */
 export async function getSmsJobStatus(
 	jobId: string,
 ): Promise<JobStatusResponse | null> {

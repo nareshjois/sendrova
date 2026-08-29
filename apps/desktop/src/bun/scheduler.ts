@@ -382,9 +382,32 @@ async function runCampaign(
 					clientJobId: attempt.id,
 				});
 
-				// Phase 1: SMS marks sent on enqueue/mock accept (not phone ack).
-				// Phase 2: call channel.waitUntilSent(result.remoteJobId) before marking sent.
-				void result.remoteJobId;
+				// SMS: enqueue is not delivery — wait for phone ack before marking sent.
+				if (result.remoteJobId && channel.waitUntilSent) {
+					const ac = new AbortController();
+					const stopPoll = setInterval(() => {
+						if (state.stopped) ac.abort();
+					}, 250);
+					try {
+						await channel.waitUntilSent(result.remoteJobId, {
+							signal: ac.signal,
+						});
+					} finally {
+						clearInterval(stopPoll);
+					}
+				}
+
+				if (state.stopped) {
+					updateAttempt(attempt.id, {
+						status: "failed",
+						error: "campaign stopped while waiting for SMS ack",
+						finishedAt: new Date().toISOString(),
+					});
+					state.rowStatuses[contact.phone] = "failed";
+					state.failed += 1;
+					state.pending = Math.max(0, state.pending - 1);
+					break;
+				}
 
 				updateAttempt(attempt.id, {
 					status: "sent",

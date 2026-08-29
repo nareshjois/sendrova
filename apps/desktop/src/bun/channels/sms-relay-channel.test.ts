@@ -45,7 +45,7 @@ describe("SmsRelayChannel mock", () => {
 		expect(channel.isReady()).toBe(true);
 	});
 
-	test("send returns remoteJobId", async () => {
+	test("send returns remoteJobId and waitUntilSent resolves", async () => {
 		const channel = new SmsRelayChannel();
 		const result = await channel.send({
 			to: "919876543210",
@@ -70,5 +70,113 @@ describe("SmsRelayChannel mock", () => {
 			relayBaseUrl: "https://relay.example.test",
 		});
 		expect(channel.isReady()).toBe(true);
+	});
+});
+
+describe("SmsRelayChannel waitUntilSent live", () => {
+	const originalFetch = globalThis.fetch;
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+	});
+
+	test("polls until phone acks sent", async () => {
+		process.env.SMS_RELAY_BASE_URL = "https://relay.example.test";
+		writeSmsRelayState({
+			status: "paired",
+			desktopToken: "tok",
+			deviceId: "dev-1",
+			relayBaseUrl: "https://relay.example.test",
+		});
+
+		let polls = 0;
+		globalThis.fetch = (async (input: RequestInfo | URL) => {
+			const url = String(input);
+			if (url.includes("/v1/jobs/") && !url.endsWith("/status")) {
+				polls += 1;
+				const status = polls < 3 ? "in_progress" : "sent";
+				return new Response(
+					JSON.stringify({ jobId: "job-1", status }),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				);
+			}
+			return new Response("not found", { status: 404 });
+		}) as typeof fetch;
+
+		const channel = new SmsRelayChannel();
+		await channel.waitUntilSent("job-1", {
+			pollIntervalMs: 10,
+			timeoutMs: 5_000,
+		});
+		expect(polls).toBeGreaterThanOrEqual(3);
+	});
+
+	test("throws when phone reports failed", async () => {
+		process.env.SMS_RELAY_BASE_URL = "https://relay.example.test";
+		writeSmsRelayState({
+			status: "paired",
+			desktopToken: "tok",
+			deviceId: "dev-1",
+			relayBaseUrl: "https://relay.example.test",
+		});
+
+		globalThis.fetch = (async () =>
+			new Response(
+				JSON.stringify({
+					jobId: "job-fail",
+					status: "failed",
+					error: "RADIO_ERROR",
+				}),
+				{ status: 200, headers: { "Content-Type": "application/json" } },
+			)) as typeof fetch;
+
+		const channel = new SmsRelayChannel();
+		await expect(
+			channel.waitUntilSent("job-fail", { pollIntervalMs: 10, timeoutMs: 1_000 }),
+		).rejects.toThrow(/RADIO_ERROR/);
+	});
+
+	test("send alone does not imply delivered — waitUntilSent still required", async () => {
+		process.env.SMS_RELAY_BASE_URL = "https://relay.example.test";
+		writeSmsRelayState({
+			status: "paired",
+			desktopToken: "tok",
+			deviceId: "dev-1",
+			relayBaseUrl: "https://relay.example.test",
+		});
+
+		let jobStatus: "pending" | "sent" = "pending";
+		globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+			const url = String(input);
+			if (url.endsWith("/v1/jobs") && init?.method === "POST") {
+				return new Response(
+					JSON.stringify({ jobId: "job-enqueue", status: "pending" }),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				);
+			}
+			if (url.includes("/v1/jobs/job-enqueue")) {
+				return new Response(
+					JSON.stringify({ jobId: "job-enqueue", status: jobStatus }),
+					{ status: 200, headers: { "Content-Type": "application/json" } },
+				);
+			}
+			return new Response("not found", { status: 404 });
+		}) as typeof fetch;
+
+		const channel = new SmsRelayChannel();
+		const result = await channel.send({
+			to: "919876543210",
+			body: "Hi",
+			clientJobId: "a1",
+		});
+		expect(result.remoteJobId).toBe("job-enqueue");
+
+		const pendingWait = channel.waitUntilSent("job-enqueue", {
+			pollIntervalMs: 20,
+			timeoutMs: 2_000,
+		});
+		await Bun.sleep(40);
+		jobStatus = "sent";
+		await pendingWait;
 	});
 });

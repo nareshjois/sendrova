@@ -20,12 +20,19 @@ export type SendMessageResult = {
 	remoteJobId?: string;
 };
 
+export type WaitUntilSentOpts = {
+	signal?: AbortSignal;
+	/** Poll interval for remote job status (default 1.5s). */
+	pollIntervalMs?: number;
+	/** Give up waiting for phone ack (default 120s). */
+	timeoutMs?: number;
+};
+
 /**
  * Outbound delivery adapter for a campaign channel.
  *
- * Phase 1: SMS may treat enqueue (or mock accept) as success.
- * Phase 2: SmsRelayChannel.waitUntilSent polls until phone ack before
- * the scheduler marks the attempt sent.
+ * SMS: `send` enqueues only; scheduler must `waitUntilSent` until phone ack
+ * before marking the attempt sent.
  */
 export interface MessageChannel {
 	readonly kind: MessageChannelKind;
@@ -33,6 +40,6 @@ export interface MessageChannel {
 	send(input: SendMessageInput): Promise<SendMessageResult>;
 	waitUntilSent?(
 		remoteJobId: string,
-		opts?: { signal?: AbortSignal },
+		opts?: WaitUntilSentOpts,
 	): Promise<void>;
 }
