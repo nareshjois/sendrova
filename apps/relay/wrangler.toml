@@ -1,0 +1,18 @@
+name = "sendrova-sms-relay"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[r2_buckets]]
+binding = "SMS_BUCKET"
+bucket_name = "sendrova-sms"
+preview_bucket_name = "sendrova-sms-preview"
+
+# TOKEN_SIGNING_KEY is NOT in [vars] — a public default would ship on deploy.
+# Local: copy `.dev.vars.example` → `.dev.vars` (gitignored; wrangler dev loads it).
+# Production: `cd apps/relay && wrangler secret put TOKEN_SIGNING_KEY`
+# Vitest injects a test key via vitest.config.ts miniflare bindings.
+
+# Hourly GC: expired pair records + terminal job TTL + abandoned leases.
+[triggers]
+crons = ["0 * * * *"]

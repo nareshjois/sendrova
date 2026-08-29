@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Sendrova</string>
+    <string name="tagline">SMS phone gateway</string>
+    <string name="status_unpaired">Not paired</string>
+    <string name="status_paired">Paired — polling for jobs</string>
+    <string name="status_pairing">Pairing…</string>
+    <string name="hint_paste_uri">Paste sendrova://sms-pair?… URI</string>
+    <string name="action_pair">Pair</string>
+    <string name="action_scan_qr">Scan QR</string>
+    <string name="action_unpair">Unpair</string>
+    <string name="device_id_label">Device ID</string>
+    <string name="relay_url_label">Relay</string>
+    <string name="last_event_label">Last event</string>
+    <string name="permission_sms_rationale">Sendrova needs SMS permission to deliver campaign messages from your desktop.</string>
+    <string name="permission_camera_rationale">Camera access is used only to scan the desktop pairing QR.</string>
+    <string name="notification_channel_name">SMS job polling</string>
+    <string name="notification_title">Sendrova SMS gateway</string>
+    <string name="notification_text">Polling for pending SMS jobs</string>
+    <string name="error_invalid_pair_uri">Invalid pair URI. Expected sendrova://sms-pair?u=…&amp;pairId=…&amp;secret=…</string>
+    <string name="error_pair_failed">Pairing failed: %1$s</string>
+    <string name="paired_ok">Paired successfully</string>
+    <string name="unpaired_ok">Unpaired</string>
+</resources>

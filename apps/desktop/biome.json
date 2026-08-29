@@ -21,12 +21,7 @@
 		}
 	},
 	"files": {
-		"include": [
-			"apps/desktop/src/**/*",
-			"packages/shared/**/*",
-			"packages/sms-relay-api/**/*",
-			"scripts/**/*"
-		],
-		"ignore": ["dist", "node_modules", "build", "artifacts", ".turbo"]
+		"include": ["src/**/*"],
+		"ignore": ["dist", "node_modules", "build"]
 	}
 }

@@ -1,25 +1,25 @@
 /**
  * Optional: regenerate derived assets from platform icon sources.
  *
- * Source of truth (user-provided):
+ * Source of truth (user-provided, under apps/desktop):
  *   windows/icon-256x256px.ico
  *   macOS/AppIcon.iconset/
  *   linux/icon.png (512px; also ships small 16/24 PNGs)
  *
- * Electrobun wiring is in electrobun.config.ts — run this script only if you
- * need to refresh src/mainview favicons / assets/ copies from those sources.
+ * Electrobun wiring is in apps/desktop/electrobun.config.ts — run this script
+ * only if you need to refresh src/mainview favicons / assets/ copies.
  *
  * On Windows: copies files with PowerShell-friendly Node fs APIs (no sips).
  */
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
-const root = join(import.meta.dirname, "..");
-const macSet = join(root, "macOS/AppIcon.iconset");
-const winIco = join(root, "windows/icon-256x256px.ico");
-const linuxIcon = join(root, "linux/icon.png");
-const assets = join(root, "assets");
-const mainview = join(root, "src/mainview");
+const desktop = join(import.meta.dirname, "../apps/desktop");
+const macSet = join(desktop, "macOS/AppIcon.iconset");
+const winIco = join(desktop, "windows/icon-256x256px.ico");
+const linuxIcon = join(desktop, "linux/icon.png");
+const assets = join(desktop, "assets");
+const mainview = join(desktop, "src/mainview");
 const mainAssets = join(mainview, "assets");
 
 function requireFile(path: string, label: string) {
@@ -60,5 +60,7 @@ copyFileSync(join(macSet, "icon_128x128.png"), join(mainAssets, "app-icon.png"))
 copyFileSync(join(macSet, "icon_32x32.png"), join(mainview, "favicon-32x32.png"));
 copyFileSync(join(macSet, "icon_256x256.png"), join(mainview, "apple-touch-icon.png"));
 
-console.log("Synced assets/ and mainview icons from windows/ + macOS/ + linux/");
-console.log("On macOS, optionally: iconutil -c icns macOS/AppIcon.iconset");
+console.log(
+	"Synced apps/desktop assets/ and mainview icons from windows/ + macOS/ + linux/",
+);
+console.log("On macOS, optionally: iconutil -c icns apps/desktop/macOS/AppIcon.iconset");

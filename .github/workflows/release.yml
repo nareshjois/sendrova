@@ -1,0 +1,240 @@
+# Build Windows Electrobun desktop + Android debug APK and attach to a GitHub Release.
+#
+# Triggers:
+#   - Push tags matching v* (e.g. v0.1.0, v0.1.0-canary.1)
+#   - workflow_dispatch (manual; optional tag + channel)
+#
+# Channel:
+#   - Tag contains "canary" (or dispatch channel=canary) → bun run build:canary
+#   - Otherwise → bun run build:stable (needed for /releases/latest auto-update)
+#
+# Artifacts (Electrobun names preserved — do not rename for auto-update):
+#   {channel}-win-x64-Sendrova-Setup-{channel}.zip
+#   {channel}-win-x64-Sendrova-{channel}.tar.zst   (canary) / stable equivalent
+#   {channel}-win-x64-update.json
+#   Sendrova-SMS-debug.apk
+#
+# Notes:
+#   - Windows builds are unsigned → SmartScreen warnings expected (see README).
+#   - Android ships debug/unsigned APK until signing secrets are configured.
+#   - Optional repo secret ANDROID_KEYSTORE_BASE64 (+ passwords/alias) reserved for a
+#     future signed assembleRelease job; not required for this workflow.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Electrobun channel
+        required: true
+        type: choice
+        default: canary
+        options:
+          - canary
+          - stable
+      tag:
+        description: "Release tag (e.g. v0.1.0). Required for branch runs; ignored when the ref is already a tag."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  BUN_VERSION: "1.2.19"
+
+jobs:
+  resolve:
+    name: Resolve channel / tag
+    runs-on: ubuntu-latest
+    outputs:
+      channel: ${{ steps.meta.outputs.channel }}
+      tag: ${{ steps.meta.outputs.tag }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+    steps:
+      - id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            TAG="${{ github.ref_name }}"
+          else
+            TAG="${{ github.event.inputs.tag }}"
+            if [[ -z "${TAG}" ]]; then
+              echo "::error::workflow_dispatch on a branch requires inputs.tag (e.g. v0.1.0)"
+              exit 1
+            fi
+          fi
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            CHANNEL="${{ github.event.inputs.channel }}"
+          elif [[ "${TAG}" == *canary* ]]; then
+            CHANNEL="canary"
+          else
+            CHANNEL="stable"
+          fi
+
+          if [[ "${CHANNEL}" == "canary" || "${TAG}" == *"-"* ]]; then
+            PRERELEASE=true
+          else
+            PRERELEASE=false
+          fi
+
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "channel=${CHANNEL}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=${PRERELEASE}" >> "$GITHUB_OUTPUT"
+          echo "Release tag=${TAG} channel=${CHANNEL} prerelease=${PRERELEASE}"
+
+  desktop-windows:
+    name: Windows desktop (${{ needs.resolve.outputs.channel }})
+    needs: resolve
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Cache Bun install
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build Electrobun (${{ needs.resolve.outputs.channel }})
+        shell: bash
+        run: |
+          set -euo pipefail
+          CHANNEL="${{ needs.resolve.outputs.channel }}"
+          if [[ "${CHANNEL}" == "stable" ]]; then
+            bun run build:stable
+          else
+            bun run build:canary
+          fi
+
+      - name: Stage desktop artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          CHANNEL="${{ needs.resolve.outputs.channel }}"
+          mkdir -p release-assets
+          shopt -s nullglob
+          files=(apps/desktop/artifacts/"${CHANNEL}"-win-x64-*)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "::error::No Electrobun artifacts under apps/desktop/artifacts/${CHANNEL}-win-x64-*"
+            ls -la apps/desktop/artifacts || true
+            ls -la apps/desktop/build || true
+            exit 1
+          fi
+          cp -v "${files[@]}" release-assets/
+          ls -la release-assets/
+
+      - name: Upload desktop workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 14
+
+  android-apk:
+    name: Android debug APK
+    needs: resolve
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Ensure Gradle wrapper JAR
+        working-directory: apps/android
+        shell: bash
+        run: |
+          set -euo pipefail
+          JAR="gradle/wrapper/gradle-wrapper.jar"
+          if [[ ! -f "${JAR}" ]]; then
+            echo "gradle-wrapper.jar missing — downloading Gradle 8.7 wrapper"
+            curl -fsSL -o "${JAR}" \
+              "https://raw.githubusercontent.com/gradle/gradle/v8.7.0/gradle/wrapper/gradle-wrapper.jar"
+          fi
+          test -s "${JAR}"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Assemble debug APK
+        working-directory: apps/android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Stage APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SRC="apps/android/app/build/outputs/apk/debug/app-debug.apk"
+          test -f "${SRC}"
+          mkdir -p release-assets
+          cp -v "${SRC}" release-assets/Sendrova-SMS-debug.apk
+          ls -la release-assets/
+
+      - name: Upload Android workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: release-assets/Sendrova-SMS-debug.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: GitHub Release
+    needs: [resolve, desktop-windows, android-apk]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: List release assets
+        run: ls -lah release-assets/
+
+      - name: Create / update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve.outputs.tag }}
+          name: Sendrova ${{ needs.resolve.outputs.tag }}
+          prerelease: ${{ needs.resolve.outputs.prerelease == 'true' }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

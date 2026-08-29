@@ -1,0 +1,36 @@
+{
+	"$schema": "https://turbo.build/schema.json",
+	"tasks": {
+		"build": {
+			"dependsOn": ["^build"],
+			"outputs": ["dist/**"]
+		},
+		"build:canary": {
+			"dependsOn": ["^build"],
+			"outputs": ["dist/**", "build/**"]
+		},
+		"build:stable": {
+			"dependsOn": ["^build"],
+			"outputs": ["dist/**", "build/**"]
+		},
+		"dev": {
+			"cache": false,
+			"persistent": true
+		},
+		"dev:hmr": {
+			"cache": false,
+			"persistent": true
+		},
+		"start": {
+			"cache": false,
+			"persistent": true
+		},
+		"test": {
+			"dependsOn": ["^build"]
+		},
+		"lint": {},
+		"typecheck": {
+			"dependsOn": ["^build"]
+		}
+	}
+}
