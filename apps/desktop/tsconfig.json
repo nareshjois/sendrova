@@ -16,10 +16,11 @@
 		"allowImportingTsExtensions": true,
 		"paths": {
 			"@/*": ["./src/mainview/*"],
-			"shared/*": ["./shared/*"]
+			"shared/*": ["../../packages/shared/*"],
+			"@sendrova/shared/*": ["../../packages/shared/*"]
 		},
 		"baseUrl": "."
 	},
-	"include": ["src/**/*", "shared/**/*"],
+	"include": ["src/**/*", "../../packages/shared/**/*"],
 	"exclude": ["node_modules", "dist"]
 }

@@ -17,14 +17,14 @@ import type {
 	MainRPC,
 	SettingsDTO,
 	UpdateCheckDTO,
-} from "../../shared/rpc";
+} from "@sendrova/shared/rpc";
 import {
 	APP_IDENTIFIER,
 	APP_NAME,
 	APP_VERSION,
 	GITHUB_REPO,
 	releaseBaseUrl,
-} from "../../shared/release-config";
+} from "@sendrova/shared/release-config";
 import {
 	getLocalDayBounds,
 	getRemainingToday,

@@ -1,0 +1,11 @@
+{
+	"name": "@sendrova/relay",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Placeholder for Sendrova SMS relay Cloudflare Worker (Phase 1).",
+	"scripts": {
+		"build": "echo \"@sendrova/relay: not implemented yet (Phase 1)\"",
+		"test": "echo \"@sendrova/relay: not implemented yet (Phase 1)\"",
+		"dev": "echo \"@sendrova/relay: not implemented yet (Phase 1)\""
+	}
+}

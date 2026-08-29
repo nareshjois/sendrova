@@ -4,7 +4,7 @@ import {
 	APP_NAME,
 	APP_VERSION,
 	releaseBaseUrl,
-} from "./shared/release-config";
+} from "@sendrova/shared/release-config";
 
 export default {
 	app: {
@@ -44,7 +44,7 @@ export default {
 		},
 	},
 	release: {
-		// GitHub Releases latest/download — see shared/release-config.ts
+		// GitHub Releases latest/download — see @sendrova/shared/release-config
 		baseUrl: releaseBaseUrl(),
 	},
 } satisfies ElectrobunConfig;

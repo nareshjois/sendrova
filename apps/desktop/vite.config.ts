@@ -12,7 +12,8 @@ export default defineConfig({
 	resolve: {
 		alias: {
 			"@": path.resolve(__dirname, "src/mainview"),
-			shared: path.resolve(__dirname, "shared"),
+			shared: path.resolve(__dirname, "../../packages/shared"),
+			"@sendrova/shared": path.resolve(__dirname, "../../packages/shared"),
 		},
 	},
 	server: {

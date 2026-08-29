@@ -15,29 +15,31 @@ bun install
 bun run start
 ```
 
+Monorepo layout (Bun workspaces + Turborepo): desktop lives in `apps/desktop`, shared RPC/config in `packages/shared`. Root scripts proxy into `@sendrova/desktop` via Turbo.
+
 ## Icons
 
-Platform sources (edit these, then optionally `bun run icons`):
+Platform sources under `apps/desktop` (edit these, then optionally `bun run icons`):
 
 | Path | Used for |
 | --- | --- |
-| `windows/icon-256x256px.ico` | Windows app icon (`build.win.icon`) |
-| `macOS/AppIcon.iconset/` | macOS icons when you build mac (`build.mac.icons`) |
-| `linux/icon.png` | Linux icon when you build linux (`build.linux.icon`) |
-| `src/mainview/assets/app-icon.png` | In-app titlebar icon |
+| `apps/desktop/windows/icon-256x256px.ico` | Windows app icon (`build.win.icon`) |
+| `apps/desktop/macOS/AppIcon.iconset/` | macOS icons when you build mac (`build.mac.icons`) |
+| `apps/desktop/linux/icon.png` | Linux icon when you build linux (`build.linux.icon`) |
+| `apps/desktop/src/mainview/assets/app-icon.png` | In-app titlebar icon |
 
 **Releases are Windows-only for now.** mac/linux icon paths stay configured for later; do not expect mac/linux update pipelines yet.
 
 ## Windows releases & auto-update
 
-Configured in [`shared/release-config.ts`](./shared/release-config.ts):
+Configured in [`packages/shared/release-config.ts`](./packages/shared/release-config.ts):
 
 - `GITHUB_REPO` = `nareshjois/sendrova`
 - `release.baseUrl` = `https://github.com/nareshjois/sendrova/releases/latest/download`
 
 ### Publish a Windows stable update
 
-1. Bump `APP_VERSION` in `shared/release-config.ts` (and `package.json` if you want).
+1. Bump `APP_VERSION` in `packages/shared/release-config.ts` (and `apps/desktop/package.json` if you want).
 2. On a Windows machine: `bun run build:stable`
 3. Create a **non-prerelease** GitHub Release (so `/releases/latest` resolves).
 4. Upload Electrobun **Windows** artifacts **without renaming**, for example:
@@ -80,9 +82,9 @@ Unofficial WhatsApp Web protocol. Bulk/unsolicited messaging can ban accounts. U
 | --- | --- |
 | `bun run start` | Build UI + launch Electrobun |
 | `bun run build:stable` | **Windows** stable release artifacts |
-| `bun run icons` | Sync UI/`assets` copies from `windows/` `macOS/` `linux/` |
-| `bun run typecheck` | TypeScript |
-| `bun test` | Unit tests |
+| `bun run icons` | Sync UI/`assets` copies from `apps/desktop` icon sources |
+| `bun run typecheck` | TypeScript (`@sendrova/desktop`) |
+| `bun run test` | Unit tests (`@sendrova/desktop`) |
 
 ## Developed by
 
