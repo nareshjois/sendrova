@@ -22,6 +22,20 @@ async function json<T>(res: Response): Promise<T> {
 }
 
 describe("SMS relay Worker", () => {
+	it("serves landing HTML at / and keeps /health on the API", async () => {
+		const home = await SELF.fetch("http://localhost/");
+		expect(home.status).toBe(200);
+		expect(home.headers.get("content-type") ?? "").toMatch(/text\/html/);
+		const html = await home.text();
+		expect(html).toContain("Sendrova");
+		expect(html).toContain("stable-win-x64-Sendrova-Setup.zip");
+		expect(html).toContain("Sendrova-SMS-1.0.0.apk");
+
+		const health = await SELF.fetch("http://localhost/health");
+		expect(health.status).toBe(200);
+		expect(await json<{ ok: boolean }>(health)).toEqual({ ok: true });
+	});
+
 	it("pair → enqueue → claim → ack happy path", async () => {
 		const startRes = await SELF.fetch("http://localhost/v1/pair/start", {
 			method: "POST",

@@ -2,6 +2,8 @@
 export interface Env {
 	SMS_BUCKET: R2Bucket;
 	TOKEN_SIGNING_KEY: string;
+	/** Static site (`public/`) — landing page and assets. */
+	ASSETS: Fetcher;
 }
 
 export type PairStatus = "pending" | "paired" | "expired";
