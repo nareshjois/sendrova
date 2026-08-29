@@ -2,84 +2,56 @@
 
 Single-user **local Electrobun desktop app** for paced WhatsApp messaging via [Baileys](https://baileys.wiki/introduction).
 
-This is **not** Meridian Phase 7 / `P7-WHATSAPP-001`. It lives under `tools/whatsapp-sender` outside Meridian phase gates.
-
-## Features
-
-- Multi-screen UI: **Home**, **Editor** (50/50 message | contacts), **Progress**, **Settings**, **About**
-- Shared footer: connection status + campaign actions
-- Custom titlebar on Windows (native chrome hidden) with minimize / maximize / close
-- Saved campaigns with contacts, message template, optional shared image/video
-- Parallel campaign runners on one WhatsApp session
-- Random send delays + occasional longer pauses (Settings)
-- **Max messages per day** (device local timezone)
-- SQLite via **`bun:sqlite`** under `~/.whatsapp-sender`
-- Optional GitHub Releases auto-update (Electrobun Updater)
+Public repo: [github.com/nareshjois/sendrova](https://github.com/nareshjois/sendrova)
 
 ## Quick start
 
 ```bash
-cd tools/whatsapp-sender
 bun install
 bun run start
 ```
 
-HMR: `bun run dev:hmr` (opt-in; `bun start` always uses the built bundle)
+## Icons
 
-## Screens
+Platform sources (edit these, then optionally `bun run icons`):
 
-| Screen | Purpose |
+| Path | Used for |
 | --- | --- |
-| Home | Connection, metrics ribbon, campaign list, pause/stop |
-| Editor | Split layout: template/media/preview \| contacts import |
-| Progress | Live countdown + per-contact status for a campaign |
-| Settings | Delays (seconds), extra pause, max messages/day, updates link |
-| About | Version, changelog, developer credit, check for updates |
+| `windows/icon-256x256px.ico` | Windows app icon (`build.win.icon`) |
+| `macOS/AppIcon.iconset/` | macOS icons when you build mac (`build.mac.icons`) |
+| `linux/icon.png` | Linux icon when you build linux (`build.linux.icon`) |
+| `src/mainview/assets/app-icon.png` | In-app sidebar icon |
 
-## Custom titlebar (Windows)
+**Releases are Windows-only for now.** mac/linux icon paths stay configured for later; do not expect mac/linux update pipelines yet.
 
-The window uses Electrobun `titleBarStyle: "hidden"` on Windows (`hiddenInset` on macOS). The shell draws a drag region plus window controls. After load, a 1px size nudge fixes WebView2 client bounds ([Electrobun #462](https://github.com/blackboardsh/electrobun/issues/462)).
+## Windows releases & auto-update
 
-## Auto-update (GitHub Releases)
+Configured in [`shared/release-config.ts`](./shared/release-config.ts):
 
-1. Set `GITHUB_REPO` in [`shared/release-config.ts`](./shared/release-config.ts) to `"owner/repo"`.
-2. `release.baseUrl` becomes `https://github.com/owner/repo/releases/latest/download`.
-3. Build: `bun run build:stable`.
-4. Upload Electrobun artifacts to the GitHub Release **without renaming**. Typical Windows x64 names:
+- `GITHUB_REPO` = `nareshjois/sendrova`
+- `release.baseUrl` = `https://github.com/nareshjois/sendrova/releases/latest/download`
+
+### Publish a Windows stable update
+
+1. Bump `APP_VERSION` in `shared/release-config.ts` (and `package.json` if you want).
+2. On a Windows machine: `bun run build:stable`
+3. Create a **non-prerelease** GitHub Release (so `/releases/latest` resolves).
+4. Upload Electrobun **Windows** artifacts **without renaming**, for example:
 
    - `stable-win-x64-update.json`
    - `stable-win-x64-<hash>.tar.zst`
-   - optional patches: `stable-win-x64-<prevHash>.patch`
+   - optional: `stable-win-x64-<prevHash>.patch`
 
-5. In the app: **About → Check for updates** (or Settings → Open About & updates).
+5. Installed apps: **About → Check for updates**
 
-Dev / `electrobun dev` runs on the `dev` channel and skips applying updates. Leave `GITHUB_REPO` empty to disable checks (UI shows a setup hint).
+The repository must stay **public** so clients can fetch update files. Dev builds (`bun start` / `electrobun dev`) run on the `dev` channel and skip applying updates.
 
-## Icons
+## Features
 
-App icons live under `assets/`:
-
-| File | Platform |
-| --- | --- |
-| `assets/icon.iconset/` | macOS (→ `.icns` via `iconutil`) |
-| `assets/icon.ico` | Windows (multi-size) |
-| `assets/icon.png` | Linux |
-
-UI sidebar uses `src/mainview/assets/app-icon.png`. Regenerate with:
-
-```bash
-bun run scripts/generate-icons.ts
-```
-
-## Data
-
-Default root: `~/.whatsapp-sender` (override `WHATSAPP_SENDER_DATA`).
-
-| Path | Contents |
-| --- | --- |
-| `auth_info/` | Baileys session — treat as private keys |
-| `history.sqlite` | Campaigns, contacts, attempts, settings |
-| `media/<campaignId>/` | Copied campaign media |
+- Multi-screen UI: Home, Editor (50/50), Progress, Settings, About
+- Shared footer + custom Windows titlebar
+- Campaigns, templates, media, daily caps
+- SQLite under `~/.whatsapp-sender` (override `WHATSAPP_SENDER_DATA`)
 
 ## Risk
 
@@ -89,9 +61,12 @@ Unofficial WhatsApp Web protocol. Bulk/unsolicited messaging can ban accounts. U
 
 | Script | Purpose |
 | --- | --- |
-| `bun run start` | Build UI + launch Electrobun (bundled views, no Vite HMR) |
-| `bun run dev:hmr` | Vite HMR + Electrobun (`SENDROVA_HMR=1`) |
-| `bun run build:stable` | Stable release artifacts for updates |
+| `bun run start` | Build UI + launch Electrobun |
+| `bun run build:stable` | **Windows** stable release artifacts |
+| `bun run icons` | Sync UI/`assets` copies from `windows/` `macOS/` `linux/` |
 | `bun run typecheck` | TypeScript |
 | `bun test` | Unit tests |
-| `bun run lint` | Biome |
+
+## Developed by
+
+[Naresh Jois](https://www.nareshjois.com/)

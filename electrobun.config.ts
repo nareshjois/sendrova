@@ -30,19 +30,21 @@ export default {
 			notarize: false,
 			bundleCEF: false,
 			entitlements: {},
-			icons: "assets/icon.iconset",
+			// Kept for future mac builds; releases are Windows-only for now.
+			icons: "macOS/AppIcon.iconset",
 		},
 		linux: {
 			bundleCEF: false,
-			icon: "assets/icon.png",
+			// Kept for future linux builds; releases are Windows-only for now.
+			icon: "linux/icon.png",
 		},
 		win: {
 			bundleCEF: false,
-			icon: "assets/icon.ico",
+			icon: "windows/icon-256x256px.ico",
 		},
 	},
 	release: {
-		// Empty until GITHUB_REPO is set in shared/release-config.ts
+		// GitHub Releases latest/download — see shared/release-config.ts
 		baseUrl: releaseBaseUrl(),
 	},
 } satisfies ElectrobunConfig;
