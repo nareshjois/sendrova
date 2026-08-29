@@ -1,24 +1,28 @@
-# Build Windows Electrobun desktop + Android debug APK and attach to a GitHub Release.
+# Build Windows Electrobun desktop + Android signed release APK and attach to a GitHub Release.
 #
 # Triggers:
-#   - Push tags matching v* (e.g. v0.1.0, v0.1.0-canary.1)
+#   - Push tags matching v* (e.g. v1.0.0, v1.0.0-canary.1)
 #   - workflow_dispatch (manual; optional tag + channel)
 #
 # Channel:
 #   - Tag contains "canary" (or dispatch channel=canary) → bun run build:canary
 #   - Otherwise → bun run build:stable (needed for /releases/latest auto-update)
 #
+# Versioning (stable baseline 1.0.0):
+#   - Stable:  v1.0.0, v1.0.1, …
+#   - Canary:  v1.0.0-canary.1, v1.0.1-canary.1, …
+#
 # Artifacts (Electrobun names preserved — do not rename for auto-update):
 #   {channel}-win-x64-Sendrova-Setup-{channel}.zip
 #   {channel}-win-x64-Sendrova-{channel}.tar.zst   (canary) / stable equivalent
 #   {channel}-win-x64-update.json
-#   Sendrova-SMS-debug.apk
+#   Sendrova-SMS-<version>.apk   (signed release; version from apps/android versionName)
 #
 # Notes:
 #   - Windows builds are unsigned → SmartScreen warnings expected (see README).
-#   - Android ships debug/unsigned APK until signing secrets are configured.
-#   - Optional repo secret ANDROID_KEYSTORE_BASE64 (+ passwords/alias) reserved for a
-#     future signed assembleRelease job; not required for this workflow.
+#   - Android release signing requires repo secrets:
+#       ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
+#       ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
 
 name: Release
 
@@ -37,7 +41,7 @@ on:
           - canary
           - stable
       tag:
-        description: "Release tag (e.g. v0.1.0). Required for branch runs; ignored when the ref is already a tag."
+        description: "Release tag (e.g. v1.0.0). Required for branch runs; ignored when the ref is already a tag."
         required: false
         type: string
 
@@ -69,7 +73,7 @@ jobs:
           else
             TAG="${{ github.event.inputs.tag }}"
             if [[ -z "${TAG}" ]]; then
-              echo "::error::workflow_dispatch on a branch requires inputs.tag (e.g. v0.1.0)"
+              echo "::error::workflow_dispatch on a branch requires inputs.tag (e.g. v1.0.0)"
               exit 1
             fi
           fi
@@ -155,7 +159,7 @@ jobs:
           retention-days: 14
 
   android-apk:
-    name: Android debug APK
+    name: Android release APK
     needs: resolve
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -185,30 +189,62 @@ jobs:
           fi
           test -s "${JAR}"
 
+      - name: Decode release keystore
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${ANDROID_KEYSTORE_BASE64}" ]]; then
+            echo "::error::Missing secret ANDROID_KEYSTORE_BASE64. Add Android signing secrets before cutting a release."
+            exit 1
+          fi
+          mkdir -p "$HOME/android-signing"
+          echo "${ANDROID_KEYSTORE_BASE64}" | base64 -d > "$HOME/android-signing/sendrova-release.jks"
+          test -s "$HOME/android-signing/sendrova-release.jks"
+          echo "ANDROID_KEYSTORE_PATH=$HOME/android-signing/sendrova-release.jks" >> "$GITHUB_ENV"
+
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
 
-      - name: Assemble debug APK
+      - name: Assemble signed release APK
         working-directory: apps/android
-        run: ./gradlew assembleDebug --no-daemon --stacktrace
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${ANDROID_KEYSTORE_PASSWORD}" || -z "${ANDROID_KEY_ALIAS}" || -z "${ANDROID_KEY_PASSWORD}" ]]; then
+            echo "::error::Missing one or more Android signing secrets (PASSWORD / ALIAS / KEY_PASSWORD)."
+            exit 1
+          fi
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Stage APK
         shell: bash
         run: |
           set -euo pipefail
-          SRC="apps/android/app/build/outputs/apk/debug/app-debug.apk"
+          SRC="apps/android/app/build/outputs/apk/release/app-release.apk"
           test -f "${SRC}"
+          VERSION="$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' apps/android/app/build.gradle.kts | head -n1)"
+          if [[ -z "${VERSION}" ]]; then
+            echo "::error::Could not read versionName from apps/android/app/build.gradle.kts"
+            exit 1
+          fi
           mkdir -p release-assets
-          cp -v "${SRC}" release-assets/Sendrova-SMS-debug.apk
+          DEST="release-assets/Sendrova-SMS-${VERSION}.apk"
+          cp -v "${SRC}" "${DEST}"
           ls -la release-assets/
+          echo "ANDROID_APK_NAME=Sendrova-SMS-${VERSION}.apk" >> "$GITHUB_ENV"
 
       - name: Upload Android workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: android-apk
-          path: release-assets/Sendrova-SMS-debug.apk
+          path: release-assets/Sendrova-SMS-*.apk
           if-no-files-found: error
           retention-days: 14
 

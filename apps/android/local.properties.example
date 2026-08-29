@@ -1,0 +1,10 @@
+## Copy relevant keys into local.properties (gitignored). Do not commit secrets.
+## sdk.dir is usually written by Android Studio automatically.
+
+# sdk.dir=C\:\\Users\\YOU\\AppData\\Local\\Android\\Sdk
+
+## Release signing (local assembleRelease). Paths use forward slashes or escaped backslashes.
+# ANDROID_KEYSTORE_PATH=C:/Users/YOU/.sendrova/android/sendrova-release.jks
+# ANDROID_KEYSTORE_PASSWORD=
+# ANDROID_KEY_ALIAS=sendrova
+# ANDROID_KEY_PASSWORD=
