@@ -221,6 +221,7 @@ jobs:
             echo "::error::Missing one or more Android signing secrets (PASSWORD / ALIAS / KEY_PASSWORD)."
             exit 1
           fi
+          chmod +x ./gradlew
           ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Stage APK
