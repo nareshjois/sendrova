@@ -106,7 +106,10 @@ async function relayFetch<T>(
 		if (signal?.aborted) {
 			throw new Error("SMS job wait aborted");
 		}
-		throw err;
+		const detail = err instanceof Error ? err.message : String(err);
+		throw new Error(
+			`SMS relay unreachable — is the Worker running and SMS_RELAY_BASE_URL correct? (${detail})`,
+		);
 	}
 
 	const text = await res.text();
@@ -291,6 +294,23 @@ export async function refreshSmsPairStatus(): Promise<SmsRelayStoredState> {
 
 	const state = readSmsRelayState();
 	const baseUrl = resolveSmsRelayBaseUrl(state);
+
+	// Local TTL: clear credentials if the pair window already elapsed.
+	if (
+		state.status === "pending" &&
+		state.pairExpiresAt &&
+		Date.parse(state.pairExpiresAt) <= Date.now()
+	) {
+		return writeSmsRelayState({
+			status: "unpaired",
+			desktopToken: null,
+			deviceId: null,
+			pairId: null,
+			pairSecret: null,
+			pairExpiresAt: null,
+		});
+	}
+
 	if (!baseUrl || !state.desktopToken || !state.pairId) {
 		return state;
 	}
@@ -311,6 +331,8 @@ export async function refreshSmsPairStatus(): Promise<SmsRelayStoredState> {
 	if (status.status === "expired") {
 		return writeSmsRelayState({
 			status: "unpaired",
+			desktopToken: null,
+			deviceId: null,
 			pairId: null,
 			pairSecret: null,
 			pairExpiresAt: null,

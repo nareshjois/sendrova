@@ -137,9 +137,24 @@ async function toSmsConnectionDto(): Promise<SmsConnectionDTO> {
 	const channel = getMessageChannel("sms");
 	const ready = await channel.isReady();
 	let online: boolean | null = null;
-	if (mock || state.status === "paired") {
-		const health = await fetchSmsDeviceHealth().catch(() => null);
-		online = health?.online ?? (mock ? true : null);
+	let relayReachable: boolean | null = null;
+	if (mock) {
+		online = true;
+		relayReachable = true;
+	} else if (state.status === "paired" || state.status === "pending") {
+		if (state.status === "paired") {
+			try {
+				const health = await fetchSmsDeviceHealth();
+				relayReachable = true;
+				online = health?.online ?? null;
+			} catch {
+				relayReachable = false;
+				online = null;
+			}
+		} else {
+			// Pending: pair status poll is the reachability probe (UI also polls).
+			relayReachable = null;
+		}
 	}
 	const status = mock ? "paired" : state.status;
 	return {
@@ -148,6 +163,7 @@ async function toSmsConnectionDto(): Promise<SmsConnectionDTO> {
 		status,
 		deviceId: mock ? "mock-device" : state.deviceId,
 		online,
+		relayReachable,
 		relayBaseUrl: resolveSmsRelayBaseUrl(state),
 		pairId: state.pairId,
 		pairExpiresAt: state.pairExpiresAt,

@@ -19,6 +19,9 @@ const {
 	clearMockJobsForTests,
 	clearSmsRelayState,
 	isSmsMockMode,
+	readSmsRelayState,
+	refreshSmsPairStatus,
+	startSmsPairing,
 	writeSmsRelayState,
 } = await import("./index");
 
@@ -229,5 +232,71 @@ describe("SmsRelayChannel waitUntilSent live", () => {
 		await Bun.sleep(20);
 		ac.abort();
 		await expect(wait).rejects.toThrow(/aborted/);
+	});
+});
+
+describe("refreshSmsPairStatus expiry", () => {
+	const originalFetch = globalThis.fetch;
+
+	afterEach(() => {
+		globalThis.fetch = originalFetch;
+	});
+
+	test("clears desktopToken when relay reports expired", async () => {
+		process.env.SMS_RELAY_BASE_URL = "https://relay.example.test";
+		writeSmsRelayState({
+			status: "pending",
+			desktopToken: "stale-tok",
+			pairId: "pair-1",
+			pairSecret: "sec",
+			pairExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+			relayBaseUrl: "https://relay.example.test",
+		});
+
+		globalThis.fetch = (async () =>
+			new Response(JSON.stringify({ status: "expired" }), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			})) as unknown as typeof fetch;
+
+		const next = await refreshSmsPairStatus();
+		expect(next.status).toBe("unpaired");
+		expect(next.desktopToken).toBeNull();
+		expect(next.pairId).toBeNull();
+		expect(readSmsRelayState().desktopToken).toBeNull();
+	});
+
+	test("clears desktopToken when local pairExpiresAt elapsed", async () => {
+		process.env.SMS_RELAY_BASE_URL = "https://relay.example.test";
+		writeSmsRelayState({
+			status: "pending",
+			desktopToken: "stale-tok",
+			pairId: "pair-2",
+			pairSecret: "sec",
+			pairExpiresAt: new Date(Date.now() - 1_000).toISOString(),
+			relayBaseUrl: "https://relay.example.test",
+		});
+
+		let fetched = false;
+		globalThis.fetch = (async () => {
+			fetched = true;
+			return new Response("{}", { status: 500 });
+		}) as unknown as typeof fetch;
+
+		const next = await refreshSmsPairStatus();
+		expect(fetched).toBe(false);
+		expect(next.status).toBe("unpaired");
+		expect(next.desktopToken).toBeNull();
+	});
+
+	test("surfaces unreachable message when Worker is down", async () => {
+		process.env.SMS_RELAY_BASE_URL = "https://relay.example.test";
+		clearSmsRelayState();
+
+		globalThis.fetch = (async () => {
+			throw new TypeError("fetch failed");
+		}) as unknown as typeof fetch;
+
+		await expect(startSmsPairing()).rejects.toThrow(/SMS relay unreachable/);
 	});
 });

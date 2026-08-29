@@ -44,6 +44,9 @@ function smsBadge(
 ): { label: string; variant: "default" | "secondary" | "destructive" | "outline" } {
 	if (!sms) return { label: "…", variant: "outline" };
 	if (sms.mode === "mock") return { label: "Mock ready", variant: "secondary" };
+	if (sms.relayReachable === false) {
+		return { label: "Relay down", variant: "destructive" };
+	}
 	if (sms.status === "paired") {
 		if (sms.online === true) return { label: "Online", variant: "default" };
 		if (sms.online === false) return { label: "Offline", variant: "destructive" };
@@ -51,6 +54,13 @@ function smsBadge(
 	}
 	if (sms.status === "pending") return { label: "Scan QR", variant: "secondary" };
 	return { label: "Unpaired", variant: "outline" };
+}
+
+function friendlySmsError(raw: string): string {
+	if (/SMS relay unreachable/i.test(raw) || /fetch failed|ECONNREFUSED|ENOTFOUND|network/i.test(raw)) {
+		return "SMS relay unreachable. Start the Worker (`cd apps/relay && bun run dev`) or check SMS_RELAY_BASE_URL.";
+	}
+	return raw;
 }
 
 function WhatsAppStripSection() {
@@ -277,10 +287,12 @@ function SmsStripSection() {
 				}
 			} catch (err: unknown) {
 				if (!cancelled) {
-					setError(err instanceof Error ? err.message : String(err));
+					setError(
+						friendlySmsError(err instanceof Error ? err.message : String(err)),
+					);
 				}
 			}
-		}
+		};
 
 		void load();
 		return () => {
@@ -298,12 +310,25 @@ function SmsStripSection() {
 			try {
 				const next = await refresh();
 				if (cancelled) return;
+				if (next.relayReachable === false) {
+					setError(
+						friendlySmsError(
+							"SMS relay unreachable — is the Worker running and SMS_RELAY_BASE_URL correct?",
+						),
+					);
+					return;
+				}
 				if (next.status === "paired" && next.online !== false) {
+					setError(null);
+				}
+				if (next.status === "unpaired") {
 					setError(null);
 				}
 			} catch (err: unknown) {
 				if (!cancelled) {
-					setError(err instanceof Error ? err.message : String(err));
+					setError(
+						friendlySmsError(err instanceof Error ? err.message : String(err)),
+					);
 				}
 			}
 		};
@@ -327,7 +352,9 @@ function SmsStripSection() {
 			await applySms({ ...next, qrPayload: started.qrPayload });
 			setQrExpanded(true);
 		} catch (err) {
-			setError(err instanceof Error ? err.message : String(err));
+			setError(
+				friendlySmsError(err instanceof Error ? err.message : String(err)),
+			);
 		} finally {
 			setBusy(false);
 		}
@@ -341,7 +368,9 @@ function SmsStripSection() {
 			await applySms(next);
 			setUnpairOpen(false);
 		} catch (err) {
-			setError(err instanceof Error ? err.message : String(err));
+			setError(
+				friendlySmsError(err instanceof Error ? err.message : String(err)),
+			);
 		} finally {
 			setBusy(false);
 		}
@@ -404,8 +433,23 @@ function SmsStripSection() {
 
 			{error && (
 				<Alert variant="destructive" className="mt-3">
-					<AlertTitle>SMS connection error</AlertTitle>
+					<AlertTitle>
+						{error.includes("relay unreachable")
+							? "SMS relay unreachable"
+							: "SMS connection error"}
+					</AlertTitle>
 					<AlertDescription>{error}</AlertDescription>
+				</Alert>
+			)}
+
+			{sms?.relayReachable === false && !error && (
+				<Alert variant="destructive" className="mt-3">
+					<AlertTitle>SMS relay unreachable</AlertTitle>
+					<AlertDescription>
+						Cannot reach the Worker health endpoint. Start the relay (`cd
+						apps/relay && bun run dev`) or verify{" "}
+						<span className="font-mono text-xs">SMS_RELAY_BASE_URL</span>.
+					</AlertDescription>
 				</Alert>
 			)}
 

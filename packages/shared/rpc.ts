@@ -140,6 +140,12 @@ export type SmsConnectionDTO = {
 	status: "unpaired" | "pending" | "paired";
 	deviceId: string | null;
 	online: boolean | null;
+	/**
+	 * Whether the desktop could reach the SMS relay Worker.
+	 * `false` when the last health/status call failed (Worker down / bad URL).
+	 * `null` when not applicable (unpaired without a recent probe).
+	 */
+	relayReachable: boolean | null;
 	relayBaseUrl: string | null;
 	pairId: string | null;
 	pairExpiresAt: string | null;
