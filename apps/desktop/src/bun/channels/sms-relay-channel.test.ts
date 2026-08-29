@@ -289,6 +289,32 @@ describe("refreshSmsPairStatus expiry", () => {
 		expect(next.desktopToken).toBeNull();
 	});
 
+	test("clears local pair on 401 instead of treating as relay down", async () => {
+		process.env.SMS_RELAY_BASE_URL = "https://relay.example.test";
+		writeSmsRelayState({
+			status: "paired",
+			desktopToken: "revoked-tok",
+			pairId: "pair-3",
+			pairSecret: null,
+			pairExpiresAt: null,
+			deviceId: "dev-1",
+			relayBaseUrl: "https://relay.example.test",
+		});
+
+		globalThis.fetch = (async () =>
+			new Response(
+				JSON.stringify({
+					error: { code: "UNAUTHORIZED", message: "Desktop token revoked" },
+				}),
+				{ status: 401, headers: { "Content-Type": "application/json" } },
+			)) as unknown as typeof fetch;
+
+		const next = await refreshSmsPairStatus();
+		expect(next.status).toBe("unpaired");
+		expect(next.desktopToken).toBeNull();
+		expect(readSmsRelayState().status).toBe("unpaired");
+	});
+
 	test("surfaces unreachable message when Worker is down", async () => {
 		process.env.SMS_RELAY_BASE_URL = "https://relay.example.test";
 		clearSmsRelayState();

@@ -1,3 +1,4 @@
 .wrangler/
 dist/
 *.log
+.dev.vars

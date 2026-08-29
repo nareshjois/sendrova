@@ -70,16 +70,16 @@ cd apps/android && gradlew.bat assembleDebug
 ## SMS setup (relay + APK)
 
 1. **Deploy or run the Worker** (`apps/relay`):
-   - Local: `cd apps/relay && bun install && bun run dev` → typically `http://127.0.0.1:8787`
+   - Local: `cd apps/relay && bun install && cp .dev.vars.example .dev.vars && bun run dev` → typically `http://127.0.0.1:8787`
    - Production: create R2 bucket `sendrova-sms`, then:
 
      ```bash
      cd apps/relay
-     wrangler secret put TOKEN_SIGNING_KEY   # long random secret — required in prod
+     wrangler secret put TOKEN_SIGNING_KEY   # long random secret — required; no default in wrangler.toml
      bun run deploy
      ```
 
-     Do **not** ship the `[vars]` dev signing key from `wrangler.toml`.
+     Deploy without the secret fails closed (Worker returns 500 until `TOKEN_SIGNING_KEY` is set).
 
 2. **Point desktop at the relay:** set env `SMS_RELAY_BASE_URL` to the Worker base URL (no trailing slash).
 

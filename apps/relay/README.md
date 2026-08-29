@@ -9,6 +9,7 @@ Contract source of truth: [`packages/sms-relay-api`](../../packages/sms-relay-ap
 ```bash
 cd apps/relay
 bun install
+cp .dev.vars.example .dev.vars   # required for local TOKEN_SIGNING_KEY
 bun run dev          # wrangler dev — local Worker + R2
 bun run test         # vitest + @cloudflare/vitest-pool-workers (miniflare)
 bun run deploy       # wrangler deploy (after secrets + R2 bucket exist)
@@ -23,16 +24,20 @@ Bindings (see `wrangler.toml`):
 
 ### Production secret (`TOKEN_SIGNING_KEY`)
 
-`wrangler.toml` `[vars]` includes a **dev-only** signing key for local `wrangler dev` / vitest. **Do not rely on that value in production.**
+`TOKEN_SIGNING_KEY` is **not** in `wrangler.toml` `[vars]` (a committed default would ship on `wrangler deploy`). Without a secret, the Worker returns **500** (`TOKEN_SIGNING_KEY not configured`) — fail closed.
 
 ```bash
 cd apps/relay
+# Local wrangler dev:
+cp .dev.vars.example .dev.vars   # gitignored; wrangler loads it automatically
+
+# Production (required before first deploy):
 # Generate a long random secret, then:
 wrangler secret put TOKEN_SIGNING_KEY
 # paste the secret when prompted
 ```
 
-Cloudflare secrets override `[vars]` for the same name on deployed Workers. Rotate by putting a new secret (existing tokens become invalid — devices must re-pair).
+Vitest injects a non-prod test key via `vitest.config.ts`. Rotate production by putting a new secret (existing tokens become invalid — devices must re-pair).
 
 Also create the R2 bucket named in `wrangler.toml` (`sendrova-sms`) in the Cloudflare dashboard (or via `wrangler r2 bucket create`) before the first deploy.
 

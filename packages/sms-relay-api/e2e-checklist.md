@@ -9,7 +9,7 @@ Android build/sideload: [`apps/android/README.md`](../../apps/android/README.md)
 ## Prerequisites
 
 - [ ] Bun workspaces installed at repo root (`bun install`)
-- [ ] Relay reachable (`wrangler dev` or deployed Worker with `wrangler secret put TOKEN_SIGNING_KEY`)
+- [ ] Relay reachable (`cp .dev.vars.example .dev.vars` then `wrangler dev`, or deployed Worker with `wrangler secret put TOKEN_SIGNING_KEY`)
 - [ ] R2 bucket bound (`SMS_BUCKET` / `sendrova-sms`)
 - [ ] Android debug APK installed on a physical phone with SMS + USB debugging (or deploy Worker HTTPS so the phone can reach it)
 - [ ] Desktop env: `SMS_RELAY_BASE_URL=<relay base URL>` (no trailing slash)

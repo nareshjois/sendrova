@@ -71,13 +71,39 @@ const mockJobs = new Map<
 	{ status: "pending" | "sent" | "failed"; to: string; body: string }
 >();
 
-function apiError(status: number, body: unknown): Error {
+type RelayHttpError = Error & { status: number; code?: string };
+
+function apiError(status: number, body: unknown): RelayHttpError {
 	const env = body as ErrorEnvelope;
 	const message =
 		env?.error?.message ??
 		(typeof body === "string" ? body : `SMS relay HTTP ${status}`);
 	const code = env?.error?.code;
-	return new Error(code ? `${code}: ${message}` : message);
+	const err = new Error(code ? `${code}: ${message}` : message) as RelayHttpError;
+	err.status = status;
+	if (code) err.code = code;
+	return err;
+}
+
+function isRelayUnauthorized(err: unknown): boolean {
+	if (!(err instanceof Error)) return false;
+	const status = (err as RelayHttpError).status;
+	if (status === 401) return true;
+	return (
+		(err as RelayHttpError).code === "UNAUTHORIZED" ||
+		/^UNAUTHORIZED\b/.test(err.message)
+	);
+}
+
+function clearExpiredLocalPair(): SmsRelayStoredState {
+	return writeSmsRelayState({
+		status: "unpaired",
+		desktopToken: null,
+		deviceId: null,
+		pairId: null,
+		pairSecret: null,
+		pairExpiresAt: null,
+	});
 }
 
 async function relayFetch<T>(
@@ -301,26 +327,28 @@ export async function refreshSmsPairStatus(): Promise<SmsRelayStoredState> {
 		state.pairExpiresAt &&
 		Date.parse(state.pairExpiresAt) <= Date.now()
 	) {
-		return writeSmsRelayState({
-			status: "unpaired",
-			desktopToken: null,
-			deviceId: null,
-			pairId: null,
-			pairSecret: null,
-			pairExpiresAt: null,
-		});
+		return clearExpiredLocalPair();
 	}
 
 	if (!baseUrl || !state.desktopToken || !state.pairId) {
 		return state;
 	}
 
-	const status = await relayFetch<PairStatusResponse>(
-		baseUrl,
-		state.desktopToken,
-		"GET",
-		`/v1/pair/status?pairId=${encodeURIComponent(state.pairId)}`,
-	);
+	let status: PairStatusResponse;
+	try {
+		status = await relayFetch<PairStatusResponse>(
+			baseUrl,
+			state.desktopToken,
+			"GET",
+			`/v1/pair/status?pairId=${encodeURIComponent(state.pairId)}`,
+		);
+	} catch (err) {
+		// Revoked/unknown session — not "relay down".
+		if (isRelayUnauthorized(err)) {
+			return clearExpiredLocalPair();
+		}
+		throw err;
+	}
 
 	if (status.status === "paired") {
 		return writeSmsRelayState({
@@ -329,14 +357,7 @@ export async function refreshSmsPairStatus(): Promise<SmsRelayStoredState> {
 		});
 	}
 	if (status.status === "expired") {
-		return writeSmsRelayState({
-			status: "unpaired",
-			desktopToken: null,
-			deviceId: null,
-			pairId: null,
-			pairSecret: null,
-			pairExpiresAt: null,
-		});
+		return clearExpiredLocalPair();
 	}
 	return writeSmsRelayState({ status: "pending" });
 }
@@ -350,12 +371,20 @@ export async function fetchSmsDeviceHealth(): Promise<DeviceHealthResponse | nul
 	if (!baseUrl || !state.desktopToken || state.status !== "paired") {
 		return null;
 	}
-	return relayFetch<DeviceHealthResponse>(
-		baseUrl,
-		state.desktopToken,
-		"GET",
-		"/v1/device/health",
-	);
+	try {
+		return await relayFetch<DeviceHealthResponse>(
+			baseUrl,
+			state.desktopToken,
+			"GET",
+			"/v1/device/health",
+		);
+	} catch (err) {
+		if (isRelayUnauthorized(err)) {
+			clearExpiredLocalPair();
+			return null;
+		}
+		throw err;
+	}
 }
 
 export async function unpairSms(): Promise<SmsRelayStoredState> {

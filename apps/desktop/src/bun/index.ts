@@ -134,8 +134,6 @@ function toCampaignDto(row: Campaign): CampaignDTO {
 async function toSmsConnectionDto(): Promise<SmsConnectionDTO> {
 	const mock = isSmsMockMode();
 	const state = readSmsRelayState();
-	const channel = getMessageChannel("sms");
-	const ready = await channel.isReady();
 	let online: boolean | null = null;
 	let relayReachable: boolean | null = null;
 	if (mock) {
@@ -145,8 +143,15 @@ async function toSmsConnectionDto(): Promise<SmsConnectionDTO> {
 		if (state.status === "paired") {
 			try {
 				const health = await fetchSmsDeviceHealth();
-				relayReachable = true;
-				online = health?.online ?? null;
+				// Health may clear local state on 401 (revoked session).
+				const after = readSmsRelayState();
+				if (after.status !== "paired") {
+					relayReachable = true;
+					online = null;
+				} else {
+					relayReachable = true;
+					online = health?.online ?? null;
+				}
 			} catch {
 				relayReachable = false;
 				online = null;
@@ -156,18 +161,21 @@ async function toSmsConnectionDto(): Promise<SmsConnectionDTO> {
 			relayReachable = null;
 		}
 	}
-	const status = mock ? "paired" : state.status;
+	const liveState = mock ? state : readSmsRelayState();
+	const channel = getMessageChannel("sms");
+	const ready = await channel.isReady();
+	const status = mock ? "paired" : liveState.status;
 	return {
 		mode: mock ? "mock" : "live",
 		ready,
 		status,
-		deviceId: mock ? "mock-device" : state.deviceId,
+		deviceId: mock ? "mock-device" : liveState.deviceId,
 		online,
 		relayReachable,
-		relayBaseUrl: resolveSmsRelayBaseUrl(state),
-		pairId: state.pairId,
-		pairExpiresAt: state.pairExpiresAt,
-		qrPayload: status === "pending" ? buildSmsQrPayload(state) : null,
+		relayBaseUrl: resolveSmsRelayBaseUrl(liveState),
+		pairId: liveState.pairId,
+		pairExpiresAt: liveState.pairExpiresAt,
+		qrPayload: status === "pending" ? buildSmsQrPayload(liveState) : null,
 	};
 }
 
