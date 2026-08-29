@@ -143,6 +143,8 @@ export type SmsConnectionDTO = {
 	relayBaseUrl: string | null;
 	pairId: string | null;
 	pairExpiresAt: string | null;
+	/** Present while pairing so the UI can render / restore the QR. */
+	qrPayload: string | null;
 };
 
 export type SmsPairStartDTO = {

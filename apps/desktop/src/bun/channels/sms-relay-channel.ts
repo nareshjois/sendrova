@@ -216,6 +216,15 @@ export function clearMockJobsForTests(): void {
 	mockJobs.clear();
 }
 
+/** Rebuild QR deep-link from stored pending pair credentials. */
+export function buildSmsQrPayload(
+	state: SmsRelayStoredState = readSmsRelayState(),
+): string | null {
+	const relay = resolveSmsRelayBaseUrl(state);
+	if (!relay || !state.pairId || !state.pairSecret) return null;
+	return `sendrova://sms-pair?u=${encodeURIComponent(relay)}&pairId=${encodeURIComponent(state.pairId)}&secret=${encodeURIComponent(state.pairSecret)}`;
+}
+
 export async function startSmsPairing(): Promise<{
 	pairId: string;
 	secret: string;
@@ -240,7 +249,7 @@ export async function startSmsPairing(): Promise<{
 		"/v1/pair/start",
 	);
 
-	writeSmsRelayState({
+	const next = writeSmsRelayState({
 		relayBaseUrl: started.relayBaseUrl || baseUrl,
 		desktopToken: started.desktopToken,
 		pairId: started.pairId,
@@ -251,7 +260,10 @@ export async function startSmsPairing(): Promise<{
 	});
 
 	const relay = started.relayBaseUrl || baseUrl;
-	const qrPayload = `sendrova://sms-pair?u=${encodeURIComponent(relay)}&pairId=${encodeURIComponent(started.pairId)}&secret=${encodeURIComponent(started.secret)}`;
+	const qrPayload = buildSmsQrPayload(next);
+	if (!qrPayload) {
+		throw new Error("Failed to build SMS pair QR payload");
+	}
 
 	return {
 		pairId: started.pairId,

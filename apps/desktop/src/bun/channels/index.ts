@@ -11,6 +11,7 @@ export {
 	fetchSmsDeviceHealth,
 	unpairSms,
 	getSmsJobStatus,
+	buildSmsQrPayload,
 	clearMockJobsForTests,
 } from "./sms-relay-channel";
 export {

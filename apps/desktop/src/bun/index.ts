@@ -28,6 +28,7 @@ import {
 	releaseBaseUrl,
 } from "@sendrova/shared/release-config";
 import {
+	buildSmsQrPayload,
 	fetchSmsDeviceHealth,
 	getMessageChannel,
 	isSmsMockMode,
@@ -140,15 +141,17 @@ async function toSmsConnectionDto(): Promise<SmsConnectionDTO> {
 		const health = await fetchSmsDeviceHealth().catch(() => null);
 		online = health?.online ?? (mock ? true : null);
 	}
+	const status = mock ? "paired" : state.status;
 	return {
 		mode: mock ? "mock" : "live",
 		ready,
-		status: mock ? "paired" : state.status,
+		status,
 		deviceId: mock ? "mock-device" : state.deviceId,
 		online,
 		relayBaseUrl: resolveSmsRelayBaseUrl(state),
 		pairId: state.pairId,
 		pairExpiresAt: state.pairExpiresAt,
+		qrPayload: status === "pending" ? buildSmsQrPayload(state) : null,
 	};
 }
 

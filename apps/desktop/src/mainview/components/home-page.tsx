@@ -1,6 +1,7 @@
 import { ConnectionStrip } from "@/components/connection-strip";
 import { CampaignStatusBadge } from "@/components/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -319,6 +320,9 @@ export function HomePage({
 									<div className="min-w-0 space-y-1">
 										<div className="flex flex-wrap items-center gap-2">
 											<span className="font-medium">{c.name}</span>
+											<Badge variant="outline" className="capitalize">
+												{c.channel === "sms" ? "SMS" : "WhatsApp"}
+											</Badge>
 											<CampaignStatusBadge
 												status={c.status}
 												pausedReason={c.paused_reason}

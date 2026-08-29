@@ -182,7 +182,11 @@ export function ProgressPage({
 					<h1 className="text-2xl font-semibold tracking-tight">
 						{campaign?.name ?? "Progress"}
 					</h1>
-					<p className="text-sm text-muted-foreground">Live send progress</p>
+					<p className="text-sm text-muted-foreground">
+						{campaign?.channel === "sms"
+							? "Live send progress — Sent means the phone acknowledged the SMS job"
+							: "Live send progress"}
+					</p>
 				</div>
 				<Button
 					variant="outline"

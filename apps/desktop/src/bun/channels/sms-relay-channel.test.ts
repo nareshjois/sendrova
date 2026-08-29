@@ -101,7 +101,7 @@ describe("SmsRelayChannel waitUntilSent live", () => {
 				);
 			}
 			return new Response("not found", { status: 404 });
-		}) as typeof fetch;
+		}) as unknown as typeof fetch;
 
 		const channel = new SmsRelayChannel();
 		await channel.waitUntilSent("job-1", {
@@ -128,7 +128,7 @@ describe("SmsRelayChannel waitUntilSent live", () => {
 					error: "RADIO_ERROR",
 				}),
 				{ status: 200, headers: { "Content-Type": "application/json" } },
-			)) as typeof fetch;
+			)) as unknown as typeof fetch;
 
 		const channel = new SmsRelayChannel();
 		await expect(
@@ -161,7 +161,7 @@ describe("SmsRelayChannel waitUntilSent live", () => {
 				);
 			}
 			return new Response("not found", { status: 404 });
-		}) as typeof fetch;
+		}) as unknown as typeof fetch;
 
 		const channel = new SmsRelayChannel();
 		const result = await channel.send({

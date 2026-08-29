@@ -646,10 +646,12 @@ export function CampaignEditorPage({
 							{channel === "sms" && (
 								<p className="text-xs text-muted-foreground">
 									{smsConnection?.mode === "mock"
-										? "SMS mock mode is ready (no SMS_RELAY_BASE_URL). Pairing UI comes in Phase 2."
+										? "SMS mock mode is ready (no SMS_RELAY_BASE_URL). Use Home to pair a real phone when the relay URL is set."
 										: smsConnection?.ready
-											? "SMS phone gateway is paired."
-											: "Pair a phone gateway before starting (Phase 2 QR polish)."}
+											? smsConnection.online === false
+												? "Phone gateway is paired but offline — messages stay queued until the phone polls again. Sent means the phone acknowledged the SMS, not that the carrier delivered it."
+												: "Phone gateway is paired. Campaigns mark a contact sent only after the phone acknowledges each SMS job — not when it is queued on the relay."
+											: "Pair a phone on Home (SMS QR) before starting a live SMS campaign."}
 								</p>
 							)}
 
