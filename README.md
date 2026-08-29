@@ -174,7 +174,7 @@ CI jobs:
 2. **Android (`ubuntu-latest` + JDK 17 + Android SDK)** — decode keystore from secrets → `./gradlew assembleRelease`; attaches `Sendrova-SMS-<versionName>.apk`.
 3. **Publish** — `softprops/action-gh-release` attaches both jobs’ assets to one Release.
 
-Electrobun Windows builds are heavy (~tens of minutes). No Electrobun license token is required for the current open toolchain; builds are **unsigned** (SmartScreen as above). Bun (`1.2.19`) and Gradle caches are enabled in the workflow.
+Electrobun Windows builds are heavy (~tens of minutes). No Electrobun license token is required for the current open toolchain; builds are **unsigned** (SmartScreen as above). Bun (`1.4`) and Gradle caches are enabled in the workflow.
 
 ### Android release signing (required for CI)
 
