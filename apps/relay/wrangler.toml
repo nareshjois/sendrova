@@ -1,0 +1,13 @@
+name = "sendrova-sms-relay"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[r2_buckets]]
+binding = "SMS_BUCKET"
+bucket_name = "sendrova-sms"
+preview_bucket_name = "sendrova-sms-preview"
+
+# Local/dev secret — override via `wrangler secret put TOKEN_SIGNING_KEY` in production.
+[vars]
+TOKEN_SIGNING_KEY = "dev-token-signing-key-change-me"
