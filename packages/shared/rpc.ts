@@ -79,6 +79,7 @@ export type AttemptDTO = {
 	delay_before_ms: number | null;
 	started_at: string | null;
 	finished_at: string | null;
+	remote_job_id: string | null;
 };
 
 export type ImportRowDTO = {

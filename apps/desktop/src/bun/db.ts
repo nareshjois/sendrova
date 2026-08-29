@@ -68,6 +68,8 @@ export type Attempt = {
 	delay_before_ms: number | null;
 	started_at: string | null;
 	finished_at: string | null;
+	/** SMS relay job id after enqueue (null for WhatsApp / pre-enqueue). */
+	remote_job_id: string | null;
 };
 
 export type Settings = {
@@ -146,6 +148,7 @@ export type UpdateAttemptInput = Partial<{
 	finishedAt: string | null;
 	renderedBody: string;
 	mediaKind: MediaKind;
+	remoteJobId: string | null;
 }>;
 
 export type DashboardStats = {
@@ -161,7 +164,7 @@ export type DashboardStats = {
 	sentToday: number;
 };
 
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 const DEFAULT_SETTINGS: Settings = {
 	delay_min_ms: 4000,
@@ -230,6 +233,7 @@ function createV2Schema(database: Database): void {
 			delay_before_ms INTEGER,
 			started_at TEXT,
 			finished_at TEXT,
+			remote_job_id TEXT,
 			FOREIGN KEY (campaign_id) REFERENCES campaigns(id) ON DELETE CASCADE
 		);
 
@@ -253,6 +257,7 @@ function createV2Schema(database: Database): void {
  * - version 1: reserved for an intermediate schema (rename → recreate)
  * - version 2: multi-campaign schema (pre-channel)
  * - version 3: campaigns.channel (whatsapp | sms)
+ * - version 4: attempts.remote_job_id (SMS relay job id)
  *
  * Legacy path (version < 2 with an old `campaigns` table lacking `name`):
  * rename campaigns/attempts to *_old, then create v2+. Old rows are kept in
@@ -290,6 +295,7 @@ function migrate(database: Database): void {
 	}
 
 	ensureCampaignChannelColumn(database);
+	ensureAttemptRemoteJobIdColumn(database);
 	seedDefaultSettings(database);
 	database.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 }
@@ -302,6 +308,14 @@ function ensureCampaignChannelColumn(database: Database): void {
 	database.exec(
 		`ALTER TABLE campaigns ADD COLUMN channel TEXT NOT NULL DEFAULT 'whatsapp'`,
 	);
+}
+
+function ensureAttemptRemoteJobIdColumn(database: Database): void {
+	const cols = database
+		.query<{ name: string }, []>(`PRAGMA table_info(attempts)`)
+		.all();
+	if (cols.some((c) => c.name === "remote_job_id")) return;
+	database.exec(`ALTER TABLE attempts ADD COLUMN remote_job_id TEXT`);
 }
 
 function campaignsHasNameColumn(database: Database): boolean {
@@ -809,8 +823,8 @@ export function insertAttempt(input: InsertAttemptInput): Attempt {
 	database.run(
 		`INSERT INTO attempts (
 			id, campaign_id, contact_id, row_index, phone, fields_json, rendered_body,
-			media_kind, status, error, delay_before_ms, started_at, finished_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			media_kind, status, error, delay_before_ms, started_at, finished_at, remote_job_id
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
 		[
 			id,
 			input.campaignId,
@@ -853,6 +867,10 @@ export function updateAttempt(
 			patch.finishedAt !== undefined ? patch.finishedAt : current.finished_at,
 		rendered_body: patch.renderedBody ?? current.rendered_body,
 		media_kind: patch.mediaKind ?? current.media_kind,
+		remote_job_id:
+			patch.remoteJobId !== undefined
+				? patch.remoteJobId
+				: current.remote_job_id,
 	};
 
 	database.run(
@@ -863,7 +881,8 @@ export function updateAttempt(
 			started_at = ?,
 			finished_at = ?,
 			rendered_body = ?,
-			media_kind = ?
+			media_kind = ?,
+			remote_job_id = ?
 		 WHERE id = ?`,
 		[
 			next.status,
@@ -873,6 +892,7 @@ export function updateAttempt(
 			next.finished_at,
 			next.rendered_body,
 			next.media_kind,
+			next.remote_job_id,
 			id,
 		],
 	);
@@ -896,6 +916,26 @@ export function getAttempts(campaignId: string): Attempt[] {
 			`SELECT * FROM attempts WHERE campaign_id = ? ORDER BY row_index ASC`,
 		)
 		.all(campaignId);
+}
+
+/**
+ * Latest in-flight SMS attempt per phone that already has a relay job id.
+ * Used to resume waitUntilSent after mid-flight stop instead of re-enqueueing.
+ */
+export function getOpenRemoteJobAttempts(
+	campaignId: string,
+): Map<string, Attempt> {
+	const byPhone = new Map<string, Attempt>();
+	for (const attempt of getAttempts(campaignId)) {
+		if (!attempt.remote_job_id) continue;
+		const resumable =
+			attempt.status === "sending" ||
+			(attempt.status === "failed" &&
+				/stopped while waiting for SMS ack/i.test(attempt.error ?? ""));
+		if (!resumable) continue;
+		byPhone.set(attempt.phone, attempt);
+	}
+	return byPhone;
 }
 
 export function getSetting(key: keyof Settings): string {

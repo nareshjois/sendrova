@@ -273,6 +273,7 @@ function toAttemptDto(row: Attempt): AttemptDTO {
 		delay_before_ms: row.delay_before_ms,
 		started_at: row.started_at,
 		finished_at: row.finished_at,
+		remote_job_id: row.remote_job_id ?? null,
 	};
 }
 

@@ -27,6 +27,7 @@ const {
 	getCampaign,
 	getContacts,
 	getDashboardStats,
+	getOpenRemoteJobAttempts,
 	getSetting,
 	insertAttempt,
 	listCampaigns,
@@ -261,6 +262,7 @@ describe("db", () => {
 		updateAttempt(attempt.id, {
 			status: "sent",
 			finishedAt: new Date().toISOString(),
+			remoteJobId: "job-abc",
 		});
 		updateCampaign(campaign.id, {
 			status: "completed",
@@ -272,6 +274,7 @@ describe("db", () => {
 		const attempts = getAttempts(campaign.id);
 		expect(attempts).toHaveLength(1);
 		expect(attempts[0]?.status).toBe("sent");
+		expect(attempts[0]?.remote_job_id).toBe("job-abc");
 		expect(countSentTodayLocal()).toBe(1);
 
 		const settings = getAllSettings();
@@ -279,6 +282,36 @@ describe("db", () => {
 		expect(settings.max_messages_per_day).toBe(100);
 		setSetting("max_messages_per_day", 50);
 		expect(getSetting("max_messages_per_day")).toBe("50");
+	});
+
+	test("getOpenRemoteJobAttempts finds mid-flight SMS jobs", () => {
+		const campaign = createCampaign({ name: "OpenSMS", channel: "sms" });
+		const open = insertAttempt({
+			campaignId: campaign.id,
+			rowIndex: 0,
+			phone: "911111111111",
+			fields: {},
+			renderedBody: "hi",
+			status: "sending",
+			startedAt: new Date().toISOString(),
+		});
+		updateAttempt(open.id, {
+			remoteJobId: "relay-1",
+			error: "campaign stopped while waiting for SMS ack",
+		});
+		insertAttempt({
+			campaignId: campaign.id,
+			rowIndex: 1,
+			phone: "922222222222",
+			fields: {},
+			renderedBody: "bye",
+			status: "sent",
+			finishedAt: new Date().toISOString(),
+		});
+
+		const map = getOpenRemoteJobAttempts(campaign.id);
+		expect(map.size).toBe(1);
+		expect(map.get("911111111111")?.remote_job_id).toBe("relay-1");
 	});
 
 	test("deleteCampaign cascades contacts", () => {

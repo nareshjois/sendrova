@@ -3,10 +3,12 @@ import {
 	getAttempts,
 	getCampaign,
 	getContacts,
+	getOpenRemoteJobAttempts,
 	insertAttempt,
 	listCampaigns,
 	updateAttempt,
 	updateCampaign,
+	type Attempt,
 	type AttemptStatus,
 	type CampaignStatus,
 	type Contact,
@@ -252,6 +254,7 @@ export async function startCampaign(campaignId: string): Promise<void> {
 	const contacts = getContacts(campaignId).filter((c) => c.valid === 1 && c.phone);
 	const sentPhones = alreadySentPhones(campaignId);
 	const pendingContacts = contacts.filter((c) => !sentPhones.has(c.phone));
+	const openRemoteJobs = getOpenRemoteJobAttempts(campaignId);
 
 	const rowStatuses: Record<string, AttemptStatus> = {};
 	for (const c of contacts) {
@@ -285,11 +288,17 @@ export async function startCampaign(campaignId: string): Promise<void> {
 	});
 	emitProgress(state, "running");
 
-	void runCampaign(state, pendingContacts, campaign.template_text, {
-		mediaKind: channelKind === "sms" ? "none" : campaign.media_kind,
-		mediaPath: channelKind === "sms" ? null : campaign.media_path,
-		channelKind,
-	}).catch((err) => {
+	void runCampaign(
+		state,
+		pendingContacts,
+		campaign.template_text,
+		{
+			mediaKind: channelKind === "sms" ? "none" : campaign.media_kind,
+			mediaPath: channelKind === "sms" ? null : campaign.media_path,
+			channelKind,
+		},
+		openRemoteJobs,
+	).catch((err) => {
 		console.error("[scheduler] campaign crashed", campaignId, err);
 		state.lastError = err instanceof Error ? err.message : String(err);
 		syncCampaignCounts(state, "failed", true);
@@ -307,6 +316,7 @@ async function runCampaign(
 		mediaPath: string | null;
 		channelKind: MessageChannelKind;
 	},
+	openRemoteJobs: Map<string, Attempt> = new Map(),
 ): Promise<void> {
 	const channel = getMessageChannel(media.channelKind);
 	try {
@@ -346,6 +356,47 @@ async function runCampaign(
 			const startedAt = new Date().toISOString();
 			state.rowStatuses[contact.phone] = "sending";
 
+			// Resume mid-flight SMS: wait on the existing relay job instead of
+			// inserting a new attempt (which would mint a new clientJobId).
+			const open = openRemoteJobs.get(contact.phone);
+			if (
+				media.channelKind === "sms" &&
+				open?.remote_job_id &&
+				channel.waitUntilSent
+			) {
+				emitProgress(state, "running");
+				try {
+					if (isCapHit()) {
+						updateAttempt(open.id, {
+							status: "sending",
+							error: "daily limit reached",
+							finishedAt: null,
+						});
+						state.rowStatuses[contact.phone] = "pending";
+						pauseAllForDailyLimit();
+						break;
+					}
+					await waitForSmsAck(state, channel, open.remote_job_id);
+					updateAttempt(open.id, {
+						status: "sent",
+						error: null,
+						finishedAt: new Date().toISOString(),
+						remoteJobId: open.remote_job_id,
+					});
+					state.rowStatuses[contact.phone] = "sent";
+					state.sent += 1;
+					state.pending = Math.max(0, state.pending - 1);
+					syncCampaignCounts(state, "running");
+					emitProgress(state, "running");
+					openRemoteJobs.delete(contact.phone);
+					if (state.stopped) break;
+				} catch (err) {
+					await handleSendError(state, open, err);
+					if (state.stopped) break;
+				}
+				continue;
+			}
+
 			const attempt = insertAttempt({
 				campaignId: state.campaignId,
 				contactId: contact.id,
@@ -361,6 +412,7 @@ async function runCampaign(
 
 			emitProgress(state, "running");
 
+			let remoteJobId: string | undefined;
 			try {
 				// Re-check cap immediately before send (another runner may have consumed).
 				if (isCapHit()) {
@@ -382,27 +434,23 @@ async function runCampaign(
 					clientJobId: attempt.id,
 				});
 
+				remoteJobId = result.remoteJobId;
+				if (remoteJobId) {
+					updateAttempt(attempt.id, { remoteJobId });
+				}
+
 				// SMS: enqueue is not delivery — wait for phone ack before marking sent.
 				// Stop aborts the wait (catch below). If wait resolves, the phone already
 				// acked — always mark sent (never fail a successful ack if stop races in).
-				if (result.remoteJobId && channel.waitUntilSent) {
-					const ac = new AbortController();
-					const stopPoll = setInterval(() => {
-						if (state.stopped) ac.abort();
-					}, 250);
-					try {
-						await channel.waitUntilSent(result.remoteJobId, {
-							signal: ac.signal,
-						});
-					} finally {
-						clearInterval(stopPoll);
-					}
+				if (remoteJobId && channel.waitUntilSent) {
+					await waitForSmsAck(state, channel, remoteJobId);
 				}
 
 				updateAttempt(attempt.id, {
 					status: "sent",
 					error: null,
 					finishedAt: new Date().toISOString(),
+					remoteJobId: remoteJobId ?? null,
 				});
 				state.rowStatuses[contact.phone] = "sent";
 				state.sent += 1;
@@ -411,36 +459,7 @@ async function runCampaign(
 				emitProgress(state, "running");
 				if (state.stopped) break;
 			} catch (err) {
-				if (err instanceof WhatsAppNotOnNetworkError) {
-					updateAttempt(attempt.id, {
-						status: "skipped",
-						error: "not on WhatsApp",
-						finishedAt: new Date().toISOString(),
-					});
-					state.rowStatuses[contact.phone] = "skipped";
-					state.skipped += 1;
-					state.pending = Math.max(0, state.pending - 1);
-					syncCampaignCounts(state, "running");
-					emitProgress(state, "running");
-					continue;
-				}
-
-				const raw = err instanceof Error ? err.message : String(err);
-				const message =
-					state.stopped && /aborted/i.test(raw)
-						? "campaign stopped while waiting for SMS ack"
-						: raw;
-				state.lastError = message;
-				updateAttempt(attempt.id, {
-					status: "failed",
-					error: message,
-					finishedAt: new Date().toISOString(),
-				});
-				state.rowStatuses[contact.phone] = "failed";
-				state.failed += 1;
-				state.pending = Math.max(0, state.pending - 1);
-				syncCampaignCounts(state, "running");
-				emitProgress(state, "running");
+				await handleSendError(state, attempt, err, remoteJobId);
 				if (state.stopped) break;
 			}
 		}
@@ -473,6 +492,83 @@ async function runCampaign(
 		}
 	}
 }
+
+async function waitForSmsAck(
+	state: RunnerState,
+	channel: ReturnType<typeof getMessageChannel>,
+	remoteJobId: string,
+): Promise<void> {
+	if (!channel.waitUntilSent) return;
+	const ac = new AbortController();
+	const stopPoll = setInterval(() => {
+		if (state.stopped) ac.abort();
+	}, 250);
+	try {
+		await channel.waitUntilSent(remoteJobId, {
+			signal: ac.signal,
+		});
+	} finally {
+		clearInterval(stopPoll);
+	}
+}
+
+async function handleSendError(
+	state: RunnerState,
+	attempt: Attempt,
+	err: unknown,
+	remoteJobId?: string,
+): Promise<void> {
+	if (err instanceof WhatsAppNotOnNetworkError) {
+		updateAttempt(attempt.id, {
+			status: "skipped",
+			error: "not on WhatsApp",
+			finishedAt: new Date().toISOString(),
+		});
+		state.rowStatuses[attempt.phone] = "skipped";
+		state.skipped += 1;
+		state.pending = Math.max(0, state.pending - 1);
+		syncCampaignCounts(state, "running");
+		emitProgress(state, "running");
+		return;
+	}
+
+	const raw = err instanceof Error ? err.message : String(err);
+	const abortedStop = state.stopped && /aborted/i.test(raw);
+	const jobId = remoteJobId ?? attempt.remote_job_id ?? undefined;
+
+	// Mid-flight stop after enqueue: keep attempt as sending with remoteJobId so
+	// resume can waitUntilSent (relay clientJobId idempotency) instead of failing
+	// and minting a duplicate SMS on the next start.
+	if (abortedStop && jobId) {
+		updateAttempt(attempt.id, {
+			status: "sending",
+			error: "campaign stopped while waiting for SMS ack",
+			finishedAt: null,
+			remoteJobId: jobId,
+		});
+		state.rowStatuses[attempt.phone] = "pending";
+		state.lastError = "campaign stopped while waiting for SMS ack";
+		emitProgress(state, "running");
+		return;
+	}
+
+	const message = abortedStop
+		? "campaign stopped while waiting for SMS ack"
+		: raw;
+	state.lastError = message;
+	updateAttempt(attempt.id, {
+		status: "failed",
+		error: message,
+		finishedAt: new Date().toISOString(),
+		remoteJobId: jobId ?? null,
+	});
+	state.rowStatuses[attempt.phone] = "failed";
+	state.failed += 1;
+	state.pending = Math.max(0, state.pending - 1);
+	syncCampaignCounts(state, "running");
+	emitProgress(state, "running");
+}
+
 
 export function pauseCampaign(
 	campaignId: string,
