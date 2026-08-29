@@ -68,7 +68,7 @@ export function AboutPage({
 			<div>
 				<h1 className="text-2xl font-semibold tracking-tight">About</h1>
 				<p className="text-sm text-muted-foreground">
-					Sendrova — paced WhatsApp campaigns on your desktop
+					Sendrova — paced campaigns on your desktop
 				</p>
 			</div>
 
@@ -96,9 +96,9 @@ export function AboutPage({
 						</span>
 					</p>
 					<p className="text-muted-foreground leading-relaxed">
-						Local Electrobun app for consented, paced WhatsApp messaging via
-						Baileys. Campaigns, templates, media, and daily caps stay on this
-						device.
+						Local Electrobun app for consented, paced messaging campaigns via
+						Baileys (WhatsApp Web session). Campaigns, templates, media, and
+						daily caps stay on this device.
 					</p>
 				</CardContent>
 			</Card>

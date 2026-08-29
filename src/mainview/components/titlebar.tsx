@@ -1,5 +1,6 @@
 import { electrobun } from "@/lib/electrobun";
 import { cn } from "@/lib/utils";
+import appIcon from "@/assets/app-icon.png";
 import { Minus, Square, X } from "lucide-react";
 import { useEffect, useState, type CSSProperties } from "react";
 
@@ -22,13 +23,23 @@ export function Titlebar() {
 		<header
 			className={cn(
 				"titlebar electrobun-webkit-app-region-drag flex h-9 shrink-0 items-center border-b bg-card/80 backdrop-blur-sm",
-				showCustomControls ? "justify-end pr-1.5" : "px-3",
+				showCustomControls ? "justify-between pl-3 pr-1.5" : "gap-2 px-3",
 			)}
 			style={{ WebkitAppRegion: "drag", appRegion: "drag" } as CSSProperties}
 		>
-			{!showCustomControls && (
-				<span className="text-xs text-muted-foreground">Sendrova</span>
-			)}
+			<div className="flex min-w-0 items-center gap-2">
+				<img
+					src={appIcon}
+					alt=""
+					width={16}
+					height={16}
+					className="size-4 shrink-0 rounded-sm"
+					draggable={false}
+				/>
+				<span className="truncate text-xs font-medium tracking-tight text-foreground">
+					Sendrova
+				</span>
+			</div>
 			{showCustomControls && (
 				<nav
 					className="window-controls electrobun-webkit-app-region-no-drag flex items-center gap-0.5"
