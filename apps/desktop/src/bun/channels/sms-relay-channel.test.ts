@@ -179,4 +179,55 @@ describe("SmsRelayChannel waitUntilSent live", () => {
 		jobStatus = "sent";
 		await pendingWait;
 	});
+
+	test("throws on timeout while still pending", async () => {
+		process.env.SMS_RELAY_BASE_URL = "https://relay.example.test";
+		writeSmsRelayState({
+			status: "paired",
+			desktopToken: "tok",
+			deviceId: "dev-1",
+			relayBaseUrl: "https://relay.example.test",
+		});
+
+		globalThis.fetch = (async () =>
+			new Response(
+				JSON.stringify({ jobId: "job-slow", status: "in_progress" }),
+				{ status: 200, headers: { "Content-Type": "application/json" } },
+			)) as unknown as typeof fetch;
+
+		const channel = new SmsRelayChannel();
+		await expect(
+			channel.waitUntilSent("job-slow", {
+				pollIntervalMs: 10,
+				timeoutMs: 50,
+			}),
+		).rejects.toThrow(/timed out/);
+	});
+
+	test("aborts wait when AbortSignal fires", async () => {
+		process.env.SMS_RELAY_BASE_URL = "https://relay.example.test";
+		writeSmsRelayState({
+			status: "paired",
+			desktopToken: "tok",
+			deviceId: "dev-1",
+			relayBaseUrl: "https://relay.example.test",
+		});
+
+		globalThis.fetch = (async () =>
+			new Response(
+				JSON.stringify({ jobId: "job-abort", status: "pending" }),
+				{ status: 200, headers: { "Content-Type": "application/json" } },
+			)) as unknown as typeof fetch;
+
+		const ac = new AbortController();
+		const channel = new SmsRelayChannel();
+		const wait = channel.waitUntilSent("job-abort", {
+			pollIntervalMs: 50,
+			timeoutMs: 5_000,
+			signal: ac.signal,
+		});
+		await Bun.sleep(20);
+		ac.abort();
+		await expect(wait).rejects.toThrow(/aborted/);
+	});
 });

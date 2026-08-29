@@ -86,6 +86,7 @@ async function relayFetch<T>(
 	method: string,
 	path: string,
 	body?: unknown,
+	signal?: AbortSignal,
 ): Promise<T> {
 	const headers: Record<string, string> = {
 		Accept: "application/json",
@@ -93,11 +94,20 @@ async function relayFetch<T>(
 	if (token) headers.Authorization = `Bearer ${token}`;
 	if (body !== undefined) headers["Content-Type"] = "application/json";
 
-	const res = await fetch(`${baseUrl}${path}`, {
-		method,
-		headers,
-		body: body === undefined ? undefined : JSON.stringify(body),
-	});
+	let res: Response;
+	try {
+		res = await fetch(`${baseUrl}${path}`, {
+			method,
+			headers,
+			body: body === undefined ? undefined : JSON.stringify(body),
+			signal,
+		});
+	} catch (err) {
+		if (signal?.aborted) {
+			throw new Error("SMS job wait aborted");
+		}
+		throw err;
+	}
 
 	const text = await res.text();
 	let parsed: unknown = null;
@@ -186,7 +196,7 @@ export class SmsRelayChannel implements MessageChannel {
 				throw new Error("SMS job wait aborted");
 			}
 
-			const snapshot = await getSmsJobStatus(remoteJobId);
+			const snapshot = await getSmsJobStatus(remoteJobId, opts?.signal);
 			if (!snapshot) {
 				throw new Error(`SMS job not found (${remoteJobId})`);
 			}
@@ -349,6 +359,7 @@ export async function unpairSms(): Promise<SmsRelayStoredState> {
 
 export async function getSmsJobStatus(
 	jobId: string,
+	signal?: AbortSignal,
 ): Promise<JobStatusResponse | null> {
 	if (isSmsMockMode()) {
 		const job = mockJobs.get(jobId);
@@ -363,5 +374,7 @@ export async function getSmsJobStatus(
 		state.desktopToken,
 		"GET",
 		`/v1/jobs/${encodeURIComponent(jobId)}`,
+		undefined,
+		signal,
 	);
 }

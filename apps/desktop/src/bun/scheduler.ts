@@ -383,6 +383,8 @@ async function runCampaign(
 				});
 
 				// SMS: enqueue is not delivery — wait for phone ack before marking sent.
+				// Stop aborts the wait (catch below). If wait resolves, the phone already
+				// acked — always mark sent (never fail a successful ack if stop races in).
 				if (result.remoteJobId && channel.waitUntilSent) {
 					const ac = new AbortController();
 					const stopPoll = setInterval(() => {
@@ -397,18 +399,6 @@ async function runCampaign(
 					}
 				}
 
-				if (state.stopped) {
-					updateAttempt(attempt.id, {
-						status: "failed",
-						error: "campaign stopped while waiting for SMS ack",
-						finishedAt: new Date().toISOString(),
-					});
-					state.rowStatuses[contact.phone] = "failed";
-					state.failed += 1;
-					state.pending = Math.max(0, state.pending - 1);
-					break;
-				}
-
 				updateAttempt(attempt.id, {
 					status: "sent",
 					error: null,
@@ -419,6 +409,7 @@ async function runCampaign(
 				state.pending = Math.max(0, state.pending - 1);
 				syncCampaignCounts(state, "running");
 				emitProgress(state, "running");
+				if (state.stopped) break;
 			} catch (err) {
 				if (err instanceof WhatsAppNotOnNetworkError) {
 					updateAttempt(attempt.id, {
@@ -434,7 +425,11 @@ async function runCampaign(
 					continue;
 				}
 
-				const message = err instanceof Error ? err.message : String(err);
+				const raw = err instanceof Error ? err.message : String(err);
+				const message =
+					state.stopped && /aborted/i.test(raw)
+						? "campaign stopped while waiting for SMS ack"
+						: raw;
 				state.lastError = message;
 				updateAttempt(attempt.id, {
 					status: "failed",
@@ -446,6 +441,7 @@ async function runCampaign(
 				state.pending = Math.max(0, state.pending - 1);
 				syncCampaignCounts(state, "running");
 				emitProgress(state, "running");
+				if (state.stopped) break;
 			}
 		}
 
