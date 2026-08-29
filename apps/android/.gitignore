@@ -12,7 +12,9 @@ captures/
 *.aab
 *.dex
 
-# Signing
+# Signing — never commit keystores or passwords
 *.jks
 *.keystore
+*.jks.base64.txt
+signing-credentials.txt
 google-services.json

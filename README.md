@@ -118,9 +118,25 @@ Prebuilt installs ship from [GitHub Releases](https://github.com/nareshjois/send
 | --- | --- |
 | `{canary\|stable}-win-x64-Sendrova-Setup-*.zip` | Windows Setup ZIP — extract `Sendrova-Setup-*.exe` and run |
 | `{canary\|stable}-win-x64-update.json` (+ matching `.tar.zst`) | Desktop auto-update payloads (leave names unchanged) |
-| `Sendrova-SMS-debug.apk` | Android SMS gateway (**debug / unsigned** — sideload with `adb install`) |
+| `Sendrova-SMS-<version>.apk` | Android SMS gateway (**signed release** — sideload with `adb install`) |
 
 SMS relay for production desktop + phone: **`https://sendrova.nareshjois.com`**. Pair from desktop Home → SMS → Pair phone, then scan with the APK.
+
+### Versioning (stable baseline 1.0.0)
+
+First stable line is **1.0.0**. Keep these in sync when cutting a release:
+
+| Surface | Field |
+| --- | --- |
+| Desktop / Electrobun | `APP_VERSION` in [`packages/shared/release-config.ts`](./packages/shared/release-config.ts) (+ `apps/desktop/package.json`) |
+| Android | `versionName` / `versionCode` in `apps/android/app/build.gradle.kts` |
+
+| Tag | Channel |
+| --- | --- |
+| `v1.0.0`, `v1.0.1`, … | **stable** → `bun run build:stable` |
+| `v1.0.0-canary.1`, … | **canary** → `bun run build:canary` (Release marked prerelease) |
+
+After merging version bumps to `main`, cut a release with `git tag v1.0.0 && git push origin v1.0.0` (do not retag casually).
 
 ### First install & SmartScreen
 
@@ -134,7 +150,7 @@ Electrobun does not code-sign Windows builds, and Sendrova does not ship a paid 
 
 **Optional (skip the Setup EXE):** run the app folder from a canary/stable build (`build/*-win-x64/Sendrova-*/bin/launcher`) or the matching `*-Sendrova-*.tar.zst` artifact. SmartScreen may still warn; same **More info → Run anyway** path. Self-signed certificates do not improve SmartScreen and are not used here.
 
-**Android:** install `Sendrova-SMS-debug.apk` via `adb install -r …` (or file manager sideload). Grant SMS (+ Camera for QR). Debug builds are fine for personal use; Play Store / release signing is not set up yet.
+**Android:** install `Sendrova-SMS-1.0.0.apk` (or the matching version) via `adb install -r …` (or file manager sideload). Grant SMS (+ Camera for QR). APKs on Releases are **signed** with the project release keystore (see [`apps/android/README.md`](./apps/android/README.md)).
 
 ## CI releases (tag push)
 
@@ -142,27 +158,27 @@ Workflow: [`.github/workflows/release.yml`](./.github/workflows/release.yml)
 
 | Trigger | Behavior |
 | --- | --- |
-| Push tag `v*` (e.g. `v0.1.0`) | Builds **stable** desktop + debug APK; creates a GitHub Release |
-| Push tag containing `canary` (e.g. `v0.1.0-canary.1`) | Builds **canary** desktop; marks the Release as prerelease |
+| Push tag `v*` (e.g. `v1.0.0`) | Builds **stable** desktop + signed Android APK; creates a GitHub Release |
+| Push tag containing `canary` (e.g. `v1.0.0-canary.1`) | Builds **canary** desktop; marks the Release as prerelease |
 | **Actions → Release → Run workflow** | Pick `canary` / `stable` and a tag name (required when not on a tag ref) |
 
 ```bash
-# Example: cut a stable release from the branch you want shipped
-git tag v0.1.0
-git push origin v0.1.0
+# Example: cut the first stable release after merge
+git tag v1.0.0
+git push origin v1.0.0
 ```
 
 CI jobs:
 
 1. **Windows (`windows-latest`)** — `bun install` + `bun run build:canary` or `build:stable` (Turbo → `@sendrova/desktop`). Uploads Electrobun files from `apps/desktop/artifacts/` **without renaming**.
-2. **Android (`ubuntu-latest` + JDK 17 + Android SDK)** — `./gradlew assembleDebug`; attaches `Sendrova-SMS-debug.apk`.
+2. **Android (`ubuntu-latest` + JDK 17 + Android SDK)** — decode keystore from secrets → `./gradlew assembleRelease`; attaches `Sendrova-SMS-<versionName>.apk`.
 3. **Publish** — `softprops/action-gh-release` attaches both jobs’ assets to one Release.
 
 Electrobun Windows builds are heavy (~tens of minutes). No Electrobun license token is required for the current open toolchain; builds are **unsigned** (SmartScreen as above). Bun (`1.2.19`) and Gradle caches are enabled in the workflow.
 
-### Optional Android release signing (not wired yet)
+### Android release signing (required for CI)
 
-To ship a signed release APK later, add repo secrets (do **not** commit keystores):
+Repo secrets (do **not** commit keystores or passwords):
 
 | Secret | Purpose |
 | --- | --- |
@@ -171,7 +187,7 @@ To ship a signed release APK later, add repo secrets (do **not** commit keystore
 | `ANDROID_KEY_ALIAS` | Key alias |
 | `ANDROID_KEY_PASSWORD` | Key password |
 
-Then extend the Android job to decode the keystore and run `assembleRelease`. Until then, Releases only publish the clearly named **debug** APK.
+Local and CI setup: [`apps/android/README.md`](./apps/android/README.md#release-signing).
 
 ### Manual publish (local Windows)
 
@@ -180,7 +196,7 @@ Configured in [`packages/shared/release-config.ts`](./packages/shared/release-co
 - `GITHUB_REPO` = `nareshjois/sendrova`
 - `release.baseUrl` = `https://github.com/nareshjois/sendrova/releases/latest/download`
 
-1. Bump `APP_VERSION` in `packages/shared/release-config.ts` (and `apps/desktop/package.json` if you want).
+1. Bump `APP_VERSION` in `packages/shared/release-config.ts`, `apps/desktop/package.json`, and Android `versionName` / `versionCode`.
 2. On a Windows machine: `bun run build:stable`
 3. Create a **non-prerelease** GitHub Release (so `/releases/latest` resolves), or use the CI tag flow above.
 4. Upload Electrobun **Windows** artifacts **without renaming**, for example:

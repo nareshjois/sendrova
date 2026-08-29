@@ -19,3 +19,9 @@ auth_info_baileys/
 artifacts/
 *.log
 .vite/
+
+# Android release signing (never commit)
+*.jks
+*.keystore
+*.jks.base64.txt
+**/signing-credentials.txt
