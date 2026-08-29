@@ -51,7 +51,7 @@ The repository must stay **public** so clients can fetch update files. Dev build
 - Multi-screen UI: Home, Editor (50/50), Progress, Settings, About
 - Shared footer + custom Windows titlebar
 - Campaigns, templates, media, daily caps
-- SQLite under `~/.whatsapp-sender` (override `WHATSAPP_SENDER_DATA`)
+- SQLite under `~/.sendrova` (override `SENDROVA_DATA`)
 
 ## Risk
 

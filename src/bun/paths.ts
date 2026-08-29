@@ -2,11 +2,11 @@ import { mkdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-/** User data root: WHATSAPP_SENDER_DATA or ~/.whatsapp-sender */
+/** User data root: SENDROVA_DATA or ~/.sendrova */
 export function getUserDataDir(): string {
 	const dir =
-		process.env.WHATSAPP_SENDER_DATA?.trim() ||
-		path.join(os.homedir(), ".whatsapp-sender");
+		process.env.SENDROVA_DATA?.trim() ||
+		path.join(os.homedir(), ".sendrova");
 	mkdirSync(dir, { recursive: true });
 	return dir;
 }
