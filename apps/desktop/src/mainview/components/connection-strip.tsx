@@ -58,7 +58,7 @@ function smsBadge(
 
 function friendlySmsError(raw: string): string {
 	if (/SMS relay unreachable/i.test(raw) || /fetch failed|ECONNREFUSED|ENOTFOUND|network/i.test(raw)) {
-		return "SMS relay unreachable. Start the Worker (`cd apps/relay && bun run dev`) or check SMS_RELAY_BASE_URL.";
+		return "SMS relay unreachable. Check network access to the built-in Worker, or run local wrangler and set SMS_RELAY_BASE_URL.";
 	}
 	return raw;
 }
@@ -313,7 +313,7 @@ function SmsStripSection() {
 				if (next.relayReachable === false) {
 					setError(
 						friendlySmsError(
-							"SMS relay unreachable — is the Worker running and SMS_RELAY_BASE_URL correct?",
+							"SMS relay unreachable — is the Worker up?",
 						),
 					);
 					return;
@@ -425,9 +425,9 @@ function SmsStripSection() {
 
 			{sms?.mode === "mock" && (
 				<p className="mt-2 text-sm text-muted-foreground">
-					Mock SMS relay is active (no{" "}
-					<span className="font-mono text-xs">SMS_RELAY_BASE_URL</span>). Campaigns
-					can run without a phone; set the relay URL to pair a real gateway.
+					Mock SMS relay is active (
+					<span className="font-mono text-xs">SMS_RELAY_MOCK</span>). Campaigns
+					can run without a phone; unset mock mode to pair a real gateway.
 				</p>
 			)}
 
@@ -446,8 +446,8 @@ function SmsStripSection() {
 				<Alert variant="destructive" className="mt-3">
 					<AlertTitle>SMS relay unreachable</AlertTitle>
 					<AlertDescription>
-						Cannot reach the Worker health endpoint. Start the relay (`cd
-						apps/relay && bun run dev`) or verify{" "}
+						Cannot reach the SMS relay Worker. Check network access to the
+						built-in relay, or run local wrangler with{" "}
 						<span className="font-mono text-xs">SMS_RELAY_BASE_URL</span>.
 					</AlertDescription>
 				</Alert>

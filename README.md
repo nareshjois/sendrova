@@ -39,7 +39,7 @@ bun install
 bun run start
 ```
 
-Root scripts proxy into `@sendrova/desktop` via Turbo. For SMS against a live Worker, set `SMS_RELAY_BASE_URL` (e.g. `http://127.0.0.1:8787` or your deployed Worker URL) before starting desktop.
+Root scripts proxy into `@sendrova/desktop` via Turbo. Desktop SMS uses the built-in relay at `https://sendrova-sms-relay.naresh-jois.workers.dev`. For local Worker development only, optionally set `SMS_RELAY_BASE_URL=http://127.0.0.1:8787`.
 
 ## Turbo / workspace commands
 
@@ -81,7 +81,7 @@ cd apps/android && gradlew.bat assembleDebug
 
      Deploy without the secret fails closed (Worker returns 500 until `TOKEN_SIGNING_KEY` is set).
 
-2. **Point desktop at the relay:** set env `SMS_RELAY_BASE_URL` to the Worker base URL (no trailing slash).
+2. **Desktop relay URL:** built-in — `https://sendrova-sms-relay.naresh-jois.workers.dev` (no trailing slash). Optional local override: `SMS_RELAY_BASE_URL=http://127.0.0.1:8787` when using `wrangler dev`.
 
 3. **Build / sideload the Android APK** — see [`apps/android/README.md`](./apps/android/README.md). Open `apps/android` in Android Studio, `assembleDebug`, `adb install`. Physical phone on the same network (or use the deployed Worker HTTPS URL).
 
@@ -91,9 +91,9 @@ cd apps/android && gradlew.bat assembleDebug
 
 ### Cloudflare dependency
 
-SMS pairing, job queue, and device health **require** a reachable Cloudflare Worker + R2 bucket. If the Worker is down or `SMS_RELAY_BASE_URL` is wrong, desktop shows **Relay down** / unreachable; campaigns cannot deliver SMS until the relay recovers. WhatsApp does not depend on Cloudflare.
+SMS pairing, job queue, and device health **require** a reachable Cloudflare Worker + R2 bucket. Desktop targets the built-in Worker URL above. If the Worker is down (or a local `SMS_RELAY_BASE_URL` override is wrong), desktop shows **Relay down** / unreachable; campaigns cannot deliver SMS until the relay recovers. WhatsApp does not depend on Cloudflare.
 
-Without `SMS_RELAY_BASE_URL`, desktop runs an **SMS mock** (campaigns can exercise the channel without a phone).
+For unit tests / offline campaigns without a phone, set `SMS_RELAY_MOCK=1` (in-memory SMS mock).
 
 ## Icons
 

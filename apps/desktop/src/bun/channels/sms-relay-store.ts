@@ -1,6 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { getUserDataDir } from "../paths";
+import {
+	isSmsRelayMockEnv,
+	SMS_RELAY_PRODUCTION_BASE_URL,
+	smsRelayEnvBaseUrlOverride,
+} from "./sms-relay-config";
 
 export type SmsRelayStoredState = {
 	relayBaseUrl: string | null;
@@ -60,17 +65,21 @@ export function clearSmsRelayState(): SmsRelayStoredState {
 	return next;
 }
 
-/** Env override wins for live client base URL when set. */
+/**
+ * Live SMS relay base URL.
+ * - `SMS_RELAY_MOCK` → null (in-memory mock, for tests / offline)
+ * - `SMS_RELAY_BASE_URL` → local wrangler override when set
+ * - else built-in production Worker URL
+ */
 export function resolveSmsRelayBaseUrl(
-	stored: SmsRelayStoredState = readSmsRelayState(),
+	_stored: SmsRelayStoredState = readSmsRelayState(),
 ): string | null {
-	const fromEnv = process.env.SMS_RELAY_BASE_URL?.trim();
-	if (fromEnv) return fromEnv.replace(/\/$/, "");
-	return stored.relayBaseUrl?.replace(/\/$/, "") ?? null;
+	if (isSmsRelayMockEnv()) return null;
+	return smsRelayEnvBaseUrlOverride() ?? SMS_RELAY_PRODUCTION_BASE_URL;
 }
 
 export function isSmsMockMode(
-	stored: SmsRelayStoredState = readSmsRelayState(),
+	_stored: SmsRelayStoredState = readSmsRelayState(),
 ): boolean {
-	return !resolveSmsRelayBaseUrl(stored);
+	return isSmsRelayMockEnv();
 }

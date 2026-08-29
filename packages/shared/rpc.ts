@@ -133,7 +133,7 @@ export type SettingsDTO = {
 	maxMessagesPerDay: number;
 };
 
-/** SMS phone-gateway connection (mock when SMS_RELAY_BASE_URL unset). */
+/** SMS phone-gateway connection (mock when SMS_RELAY_MOCK is set). */
 export type SmsConnectionDTO = {
 	mode: "mock" | "live";
 	ready: boolean;

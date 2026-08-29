@@ -134,7 +134,7 @@ async function relayFetch<T>(
 		}
 		const detail = err instanceof Error ? err.message : String(err);
 		throw new Error(
-			`SMS relay unreachable — is the Worker running and SMS_RELAY_BASE_URL correct? (${detail})`,
+			`SMS relay unreachable — is the Worker up? (${detail})`,
 		);
 	}
 
@@ -154,7 +154,8 @@ async function relayFetch<T>(
 /**
  * SMS relay channel.
  *
- * When `SMS_RELAY_BASE_URL` (and stored URL) are unset, uses an in-memory mock.
+ * Uses the built-in production Worker URL (optional `SMS_RELAY_BASE_URL` for local
+ * wrangler). Set `SMS_RELAY_MOCK=1` for an in-memory mock (unit tests / offline).
  * Live `send` only enqueues; callers must `waitUntilSent` until the phone acks.
  */
 export class SmsRelayChannel implements MessageChannel {
@@ -273,12 +274,12 @@ export async function startSmsPairing(): Promise<{
 }> {
 	if (isSmsMockMode()) {
 		throw new Error(
-			"SMS relay mock mode — set SMS_RELAY_BASE_URL to pair a phone",
+			"SMS relay mock mode — unset SMS_RELAY_MOCK to pair a phone",
 		);
 	}
 	const baseUrl = resolveSmsRelayBaseUrl();
 	if (!baseUrl) {
-		throw new Error("SMS_RELAY_BASE_URL is not set");
+		throw new Error("SMS relay base URL is not configured");
 	}
 
 	const started = await relayFetch<PairStartResponse>(

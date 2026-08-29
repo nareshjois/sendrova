@@ -12,6 +12,7 @@ function freshDataDir(): string {
 
 let dataDir = freshDataDir();
 process.env.SENDROVA_DATA = dataDir;
+process.env.SMS_RELAY_MOCK = "1";
 delete process.env.SMS_RELAY_BASE_URL;
 
 const {
@@ -21,6 +22,8 @@ const {
 	isSmsMockMode,
 	readSmsRelayState,
 	refreshSmsPairStatus,
+	resolveSmsRelayBaseUrl,
+	SMS_RELAY_PRODUCTION_BASE_URL,
 	startSmsPairing,
 	writeSmsRelayState,
 } = await import("./index");
@@ -29,6 +32,7 @@ beforeEach(() => {
 	safeRmSync(dataDir);
 	dataDir = freshDataDir();
 	process.env.SENDROVA_DATA = dataDir;
+	process.env.SMS_RELAY_MOCK = "1";
 	delete process.env.SMS_RELAY_BASE_URL;
 	clearMockJobsForTests();
 	clearSmsRelayState();
@@ -38,14 +42,28 @@ afterEach(() => {
 	clearMockJobsForTests();
 	clearSmsRelayState();
 	safeRmSync(dataDir);
+	process.env.SMS_RELAY_MOCK = "1";
 	delete process.env.SMS_RELAY_BASE_URL;
 });
 
+function enableLiveTestRelay(url = "https://relay.example.test") {
+	delete process.env.SMS_RELAY_MOCK;
+	process.env.SMS_RELAY_BASE_URL = url;
+}
+
 describe("SmsRelayChannel mock", () => {
-	test("is mock-ready when SMS_RELAY_BASE_URL unset", () => {
+	test("is mock-ready when SMS_RELAY_MOCK is set", () => {
 		expect(isSmsMockMode()).toBe(true);
+		expect(resolveSmsRelayBaseUrl()).toBeNull();
 		const channel = new SmsRelayChannel();
 		expect(channel.isReady()).toBe(true);
+	});
+
+	test("defaults to production Worker URL when not mocking", () => {
+		delete process.env.SMS_RELAY_MOCK;
+		delete process.env.SMS_RELAY_BASE_URL;
+		expect(isSmsMockMode()).toBe(false);
+		expect(resolveSmsRelayBaseUrl()).toBe(SMS_RELAY_PRODUCTION_BASE_URL);
 	});
 
 	test("send returns remoteJobId and waitUntilSent resolves", async () => {
@@ -60,7 +78,7 @@ describe("SmsRelayChannel mock", () => {
 	});
 
 	test("live mode requires paired token", () => {
-		process.env.SMS_RELAY_BASE_URL = "https://relay.example.test";
+		enableLiveTestRelay();
 		writeSmsRelayState({ status: "unpaired", desktopToken: null });
 		const channel = new SmsRelayChannel();
 		expect(isSmsMockMode()).toBe(false);
@@ -84,7 +102,7 @@ describe("SmsRelayChannel waitUntilSent live", () => {
 	});
 
 	test("polls until phone acks sent", async () => {
-		process.env.SMS_RELAY_BASE_URL = "https://relay.example.test";
+		enableLiveTestRelay();
 		writeSmsRelayState({
 			status: "paired",
 			desktopToken: "tok",
@@ -115,7 +133,7 @@ describe("SmsRelayChannel waitUntilSent live", () => {
 	});
 
 	test("throws when phone reports failed", async () => {
-		process.env.SMS_RELAY_BASE_URL = "https://relay.example.test";
+		enableLiveTestRelay();
 		writeSmsRelayState({
 			status: "paired",
 			desktopToken: "tok",
@@ -140,7 +158,7 @@ describe("SmsRelayChannel waitUntilSent live", () => {
 	});
 
 	test("send alone does not imply delivered — waitUntilSent still required", async () => {
-		process.env.SMS_RELAY_BASE_URL = "https://relay.example.test";
+		enableLiveTestRelay();
 		writeSmsRelayState({
 			status: "paired",
 			desktopToken: "tok",
@@ -184,7 +202,7 @@ describe("SmsRelayChannel waitUntilSent live", () => {
 	});
 
 	test("throws on timeout while still pending", async () => {
-		process.env.SMS_RELAY_BASE_URL = "https://relay.example.test";
+		enableLiveTestRelay();
 		writeSmsRelayState({
 			status: "paired",
 			desktopToken: "tok",
@@ -208,7 +226,7 @@ describe("SmsRelayChannel waitUntilSent live", () => {
 	});
 
 	test("aborts wait when AbortSignal fires", async () => {
-		process.env.SMS_RELAY_BASE_URL = "https://relay.example.test";
+		enableLiveTestRelay();
 		writeSmsRelayState({
 			status: "paired",
 			desktopToken: "tok",
@@ -243,7 +261,7 @@ describe("refreshSmsPairStatus expiry", () => {
 	});
 
 	test("clears desktopToken when relay reports expired", async () => {
-		process.env.SMS_RELAY_BASE_URL = "https://relay.example.test";
+		enableLiveTestRelay();
 		writeSmsRelayState({
 			status: "pending",
 			desktopToken: "stale-tok",
@@ -267,7 +285,7 @@ describe("refreshSmsPairStatus expiry", () => {
 	});
 
 	test("clears desktopToken when local pairExpiresAt elapsed", async () => {
-		process.env.SMS_RELAY_BASE_URL = "https://relay.example.test";
+		enableLiveTestRelay();
 		writeSmsRelayState({
 			status: "pending",
 			desktopToken: "stale-tok",
@@ -290,7 +308,7 @@ describe("refreshSmsPairStatus expiry", () => {
 	});
 
 	test("clears local pair on 401 instead of treating as relay down", async () => {
-		process.env.SMS_RELAY_BASE_URL = "https://relay.example.test";
+		enableLiveTestRelay();
 		writeSmsRelayState({
 			status: "paired",
 			desktopToken: "revoked-tok",
@@ -316,7 +334,7 @@ describe("refreshSmsPairStatus expiry", () => {
 	});
 
 	test("surfaces unreachable message when Worker is down", async () => {
-		process.env.SMS_RELAY_BASE_URL = "https://relay.example.test";
+		enableLiveTestRelay();
 		clearSmsRelayState();
 
 		globalThis.fetch = (async () => {

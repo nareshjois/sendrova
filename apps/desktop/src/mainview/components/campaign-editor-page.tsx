@@ -646,7 +646,7 @@ export function CampaignEditorPage({
 							{channel === "sms" && (
 								<p className="text-xs text-muted-foreground">
 									{smsConnection?.mode === "mock"
-										? "SMS mock mode is ready (no SMS_RELAY_BASE_URL). Use Home to pair a real phone when the relay URL is set."
+										? "SMS mock mode is ready (SMS_RELAY_MOCK). Unset mock mode and use Home to pair a real phone."
 										: smsConnection?.ready
 											? smsConnection.online === false
 												? "Phone gateway is paired but offline — messages stay queued until the phone polls again. Sent means the phone acknowledged the SMS, not that the carrier delivered it."

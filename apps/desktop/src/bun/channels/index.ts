@@ -21,6 +21,11 @@ export {
 	isSmsMockMode,
 	resolveSmsRelayBaseUrl,
 } from "./sms-relay-store";
+export {
+	SMS_RELAY_PRODUCTION_BASE_URL,
+	isSmsRelayMockEnv,
+	smsRelayEnvBaseUrlOverride,
+} from "./sms-relay-config";
 
 const whatsapp = new WhatsAppChannel();
 const sms = new SmsRelayChannel();
