@@ -6,5 +6,5 @@
 	"exports": {
 		"./openapi.yaml": "./openapi.yaml"
 	},
-	"files": ["openapi.yaml", "qr-payload.md", "r2-layout.md"]
+	"files": ["openapi.yaml", "qr-payload.md", "r2-layout.md", "e2e-checklist.md"]
 }
