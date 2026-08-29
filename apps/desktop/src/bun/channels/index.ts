@@ -1,0 +1,29 @@
+import { SmsRelayChannel } from "./sms-relay-channel";
+import type { MessageChannel, MessageChannelKind } from "./types";
+import { WhatsAppChannel } from "./whatsapp-channel";
+
+export type { MessageChannel, MessageChannelKind, SendMessageInput, SendMessageResult } from "./types";
+export { WhatsAppChannel, WhatsAppNotOnNetworkError } from "./whatsapp-channel";
+export {
+	SmsRelayChannel,
+	startSmsPairing,
+	refreshSmsPairStatus,
+	fetchSmsDeviceHealth,
+	unpairSms,
+	getSmsJobStatus,
+	clearMockJobsForTests,
+} from "./sms-relay-channel";
+export {
+	readSmsRelayState,
+	writeSmsRelayState,
+	clearSmsRelayState,
+	isSmsMockMode,
+	resolveSmsRelayBaseUrl,
+} from "./sms-relay-store";
+
+const whatsapp = new WhatsAppChannel();
+const sms = new SmsRelayChannel();
+
+export function getMessageChannel(kind: MessageChannelKind): MessageChannel {
+	return kind === "sms" ? sms : whatsapp;
+}

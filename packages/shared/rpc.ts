@@ -18,6 +18,7 @@ export type CampaignStatus =
 
 export type PausedReason = "user" | "daily_limit" | null;
 export type MediaKind = "none" | "image" | "video";
+export type MessageChannelKind = "whatsapp" | "sms";
 export type AttemptStatusDTO =
 	| "pending"
 	| "sending"
@@ -33,6 +34,7 @@ export type CampaignDTO = {
 	finished_at: string | null;
 	status: CampaignStatus;
 	paused_reason: PausedReason;
+	channel: MessageChannelKind;
 	template_text: string;
 	media_path: string | null;
 	media_kind: MediaKind;
@@ -131,6 +133,26 @@ export type SettingsDTO = {
 	maxMessagesPerDay: number;
 };
 
+/** SMS phone-gateway connection (mock when SMS_RELAY_BASE_URL unset). */
+export type SmsConnectionDTO = {
+	mode: "mock" | "live";
+	ready: boolean;
+	status: "unpaired" | "pending" | "paired";
+	deviceId: string | null;
+	online: boolean | null;
+	relayBaseUrl: string | null;
+	pairId: string | null;
+	pairExpiresAt: string | null;
+};
+
+export type SmsPairStartDTO = {
+	pairId: string;
+	secret: string;
+	expiresAt: string;
+	relayBaseUrl: string;
+	qrPayload: string;
+};
+
 export type AppInfoDTO = {
 	name: string;
 	version: string;
@@ -202,7 +224,11 @@ export type MainRPC = {
 				} | null;
 			};
 			createCampaign: {
-				params: { name: string; templateText?: string };
+				params: {
+					name: string;
+					templateText?: string;
+					channel?: MessageChannelKind;
+				};
 				response: CampaignDTO;
 			};
 			updateCampaign: {
@@ -211,6 +237,7 @@ export type MainRPC = {
 					name?: string;
 					templateText?: string;
 					sourceFilename?: string | null;
+					channel?: MessageChannelKind;
 				};
 				response: CampaignDTO;
 			};
@@ -277,6 +304,23 @@ export type MainRPC = {
 			setSettings: {
 				params: Partial<SettingsDTO>;
 				response: SettingsDTO;
+			};
+
+			getSmsConnection: {
+				params: Record<string, never>;
+				response: SmsConnectionDTO;
+			};
+			startSmsPair: {
+				params: Record<string, never>;
+				response: SmsPairStartDTO;
+			};
+			refreshSmsPairStatus: {
+				params: Record<string, never>;
+				response: SmsConnectionDTO;
+			};
+			unpairSms: {
+				params: Record<string, never>;
+				response: SmsConnectionDTO;
 			};
 
 			exportCampaign: { params: { id: string }; response: { csv: string } };

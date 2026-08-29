@@ -14,6 +14,8 @@ export type PausedReason = "user" | "daily_limit" | null;
 
 export type MediaKind = "none" | "image" | "video";
 
+export type MessageChannelKind = "whatsapp" | "sms";
+
 export type AttemptStatus =
 	| "pending"
 	| "sending"
@@ -29,6 +31,7 @@ export type Campaign = {
 	finished_at: string | null;
 	status: CampaignStatus;
 	paused_reason: PausedReason;
+	channel: MessageChannelKind;
 	template_text: string;
 	media_path: string | null;
 	media_kind: MediaKind;
@@ -79,6 +82,7 @@ export type Settings = {
 export type CreateCampaignInput = {
 	name: string;
 	templateText?: string;
+	channel?: MessageChannelKind;
 };
 
 export type UpdateCampaignInput = Partial<{
@@ -86,6 +90,7 @@ export type UpdateCampaignInput = Partial<{
 	finishedAt: string | null;
 	status: CampaignStatus;
 	pausedReason: PausedReason;
+	channel: MessageChannelKind;
 	templateText: string;
 	mediaPath: string | null;
 	mediaKind: MediaKind;
@@ -156,7 +161,7 @@ export type DashboardStats = {
 	sentToday: number;
 };
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 const DEFAULT_SETTINGS: Settings = {
 	delay_min_ms: 4000,
@@ -187,6 +192,7 @@ function createV2Schema(database: Database): void {
 			finished_at TEXT,
 			status TEXT NOT NULL,
 			paused_reason TEXT,
+			channel TEXT NOT NULL DEFAULT 'whatsapp',
 			template_text TEXT NOT NULL DEFAULT '',
 			media_path TEXT,
 			media_kind TEXT NOT NULL DEFAULT 'none',
@@ -245,10 +251,11 @@ function createV2Schema(database: Database): void {
  * Schema migration via PRAGMA user_version.
  * - version 0: fresh DB, OR legacy history.ts DB that never set user_version
  * - version 1: reserved for an intermediate schema (rename → recreate)
- * - version 2: current multi-campaign schema
+ * - version 2: multi-campaign schema (pre-channel)
+ * - version 3: campaigns.channel (whatsapp | sms)
  *
  * Legacy path (version < 2 with an old `campaigns` table lacking `name`):
- * rename campaigns/attempts to *_old, then create v2. Old rows are kept in
+ * rename campaigns/attempts to *_old, then create v2+. Old rows are kept in
  * *_old tables but not auto-imported.
  */
 function migrate(database: Database): void {
@@ -257,34 +264,44 @@ function migrate(database: Database): void {
 	).get();
 	const version = row?.user_version ?? 0;
 
-	if (version >= SCHEMA_VERSION) {
+	if (version < 2) {
+		const tables = database
+			.query<{ name: string }, []>(
+				`SELECT name FROM sqlite_master WHERE type='table'`,
+			)
+			.all()
+			.map((t) => t.name);
+
+		const hasLegacyCampaigns =
+			tables.includes("campaigns") && !campaignsHasNameColumn(database);
+
+		if (version === 1 || hasLegacyCampaigns) {
+			if (tables.includes("attempts") && !tables.includes("attempts_old")) {
+				database.exec(`ALTER TABLE attempts RENAME TO attempts_old`);
+			}
+			if (tables.includes("campaigns") && !tables.includes("campaigns_old")) {
+				database.exec(`ALTER TABLE campaigns RENAME TO campaigns_old`);
+			}
+		}
+
 		createV2Schema(database);
-		seedDefaultSettings(database);
-		return;
+	} else {
+		createV2Schema(database);
 	}
 
-	const tables = database
-		.query<{ name: string }, []>(
-			`SELECT name FROM sqlite_master WHERE type='table'`,
-		)
-		.all()
-		.map((t) => t.name);
-
-	const hasLegacyCampaigns =
-		tables.includes("campaigns") && !campaignsHasNameColumn(database);
-
-	if (version === 1 || hasLegacyCampaigns) {
-		if (tables.includes("attempts") && !tables.includes("attempts_old")) {
-			database.exec(`ALTER TABLE attempts RENAME TO attempts_old`);
-		}
-		if (tables.includes("campaigns") && !tables.includes("campaigns_old")) {
-			database.exec(`ALTER TABLE campaigns RENAME TO campaigns_old`);
-		}
-	}
-
-	createV2Schema(database);
+	ensureCampaignChannelColumn(database);
 	seedDefaultSettings(database);
 	database.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+}
+
+function ensureCampaignChannelColumn(database: Database): void {
+	const cols = database
+		.query<{ name: string }, []>(`PRAGMA table_info(campaigns)`)
+		.all();
+	if (cols.some((c) => c.name === "channel")) return;
+	database.exec(
+		`ALTER TABLE campaigns ADD COLUMN channel TEXT NOT NULL DEFAULT 'whatsapp'`,
+	);
 }
 
 function campaignsHasNameColumn(database: Database): boolean {
@@ -312,7 +329,15 @@ export function openDb(): Database {
 	if (db) return db;
 
 	const database = new Database(getHistoryDbPath(), { create: true });
-	database.exec("PRAGMA journal_mode = WAL;");
+	// WAL leaves -wal/-shm files that Windows often locks (EBUSY) during test cleanup.
+	const useDeleteJournal =
+		process.env.SENDROVA_TEST === "1" ||
+		process.env.SENDROVA_SQLITE_JOURNAL?.trim().toUpperCase() === "DELETE";
+	database.exec(
+		useDeleteJournal
+			? "PRAGMA journal_mode = DELETE;"
+			: "PRAGMA journal_mode = WAL;",
+	);
 	database.exec("PRAGMA foreign_keys = ON;");
 	migrate(database);
 	markInterruptedRunning(database);
@@ -346,14 +371,16 @@ export function createCampaign(input: CreateCampaignInput): Campaign {
 	const database = openDb();
 	const id = newId();
 	const ts = nowIso();
+	const channel: MessageChannelKind =
+		input.channel === "sms" ? "sms" : "whatsapp";
 
 	database.run(
 		`INSERT INTO campaigns (
 			id, name, created_at, updated_at, finished_at, status, paused_reason,
-			template_text, media_path, media_kind, source_filename,
+			channel, template_text, media_path, media_kind, source_filename,
 			row_count, sent_count, failed_count, skipped_count, pending_count
-		) VALUES (?, ?, ?, ?, NULL, 'draft', NULL, ?, NULL, 'none', NULL, 0, 0, 0, 0, 0)`,
-		[id, input.name, ts, ts, input.templateText ?? ""],
+		) VALUES (?, ?, ?, ?, NULL, 'draft', NULL, ?, ?, NULL, 'none', NULL, 0, 0, 0, 0, 0)`,
+		[id, input.name, ts, ts, channel, input.templateText ?? ""],
 	);
 
 	return getCampaign(id)!;
@@ -377,6 +404,7 @@ export function updateCampaign(
 			patch.pausedReason !== undefined
 				? patch.pausedReason
 				: current.paused_reason,
+		channel: patch.channel ?? current.channel,
 		template_text: patch.templateText ?? current.template_text,
 		media_path:
 			patch.mediaPath !== undefined ? patch.mediaPath : current.media_path,
@@ -400,6 +428,7 @@ export function updateCampaign(
 			finished_at = ?,
 			status = ?,
 			paused_reason = ?,
+			channel = ?,
 			template_text = ?,
 			media_path = ?,
 			media_kind = ?,
@@ -416,6 +445,7 @@ export function updateCampaign(
 			next.finished_at,
 			next.status,
 			next.paused_reason,
+			next.channel,
 			next.template_text,
 			next.media_path,
 			next.media_kind,
@@ -732,6 +762,7 @@ export function duplicateCampaign(sourceId: string): Campaign {
 	const copy = createCampaign({
 		name: `${source.name} (copy)`,
 		templateText: source.template_text,
+		channel: source.channel === "sms" ? "sms" : "whatsapp",
 	});
 
 	const contacts = getContacts(sourceId);
