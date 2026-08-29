@@ -1,0 +1,20 @@
+#!/bin/sh
+# Unix Gradle wrapper stub for Sendrova SMS Android.
+# Prefer opening apps/android in Android Studio, which generates gradle-wrapper.jar.
+
+DIR="$(cd "$(dirname "$0")" && pwd)"
+JAR="$DIR/gradle/wrapper/gradle-wrapper.jar"
+
+if [ ! -f "$JAR" ]; then
+  echo "Missing gradle/wrapper/gradle-wrapper.jar"
+  echo "Open apps/android in Android Studio once to generate the Gradle wrapper, then retry."
+  exit 1
+fi
+
+if [ -n "$JAVA_HOME" ]; then
+  JAVA_EXE="$JAVA_HOME/bin/java"
+else
+  JAVA_EXE="java"
+fi
+
+exec "$JAVA_EXE" -classpath "$JAR" org.gradle.wrapper.GradleWrapperMain "$@"

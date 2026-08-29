@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="sendrova_ink">#0B1F17</color>
+    <color name="sendrova_forest">#145C3E</color>
+    <color name="sendrova_leaf">#2F8F63</color>
+    <color name="sendrova_mist">#E8F2EC</color>
+    <color name="sendrova_surface">#F4FAF6</color>
+    <color name="sendrova_on_primary">#FFFFFF</color>
+    <color name="sendrova_error">#B3261E</color>
+</resources>
