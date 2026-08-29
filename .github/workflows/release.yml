@@ -53,7 +53,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  BUN_VERSION: "1.2.19"
+  BUN_VERSION: "1.4"
 
 jobs:
   resolve:
