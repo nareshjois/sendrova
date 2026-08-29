@@ -1,0 +1,10 @@
+{
+	"name": "@sendrova/sms-relay-api",
+	"version": "0.1.0",
+	"private": true,
+	"description": "Frozen OpenAPI contract for Sendrova SMS relay (desktop ↔ Worker ↔ Android).",
+	"exports": {
+		"./openapi.yaml": "./openapi.yaml"
+	},
+	"files": ["openapi.yaml", "qr-payload.md", "r2-layout.md"]
+}

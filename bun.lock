@@ -58,6 +58,10 @@
         "electrobun": "^1.16.0",
       },
     },
+    "packages/sms-relay-api": {
+      "name": "@sendrova/sms-relay-api",
+      "version": "0.1.0",
+    },
   },
   "packages": {
     "@alloc/quick-lru": ["@alloc/quick-lru@5.2.0", "", {}, "sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw=="],
@@ -521,6 +525,8 @@
     "@sendrova/relay": ["@sendrova/relay@workspace:apps/relay"],
 
     "@sendrova/shared": ["@sendrova/shared@workspace:packages/shared"],
+
+    "@sendrova/sms-relay-api": ["@sendrova/sms-relay-api@workspace:packages/sms-relay-api"],
 
     "@tailwindcss/node": ["@tailwindcss/node@4.1.18", "", { "dependencies": { "@jridgewell/remapping": "^2.3.4", "enhanced-resolve": "^5.18.3", "jiti": "^2.6.1", "lightningcss": "1.30.2", "magic-string": "^0.30.21", "source-map-js": "^1.2.1", "tailwindcss": "4.1.18" } }, "sha512-DoR7U1P7iYhw16qJ49fgXUlry1t4CpXeErJHnQ44JgTSKMaZUdf17cfn5mHchfJ4KRBZRFA/Coo+MUF5+gOaCQ=="],
 

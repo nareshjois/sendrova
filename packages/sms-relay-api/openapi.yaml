@@ -1,0 +1,484 @@
+openapi: 3.1.0
+info:
+  title: Sendrova SMS Relay API
+  version: 0.1.0
+  description: |
+    HTTP contract between Sendrova desktop, Cloudflare Worker relay, and Android phone gateway.
+    Desktop and Android never talk LAN-to-LAN; both call this Worker.
+  contact:
+    name: Sendrova
+
+servers:
+  - url: https://sms-relay.example.sendrova.dev
+    description: Deployed Worker base URL (replace per environment)
+
+tags:
+  - name: pairing
+  - name: jobs
+  - name: device
+
+paths:
+  /v1/pair/start:
+    post:
+      tags: [pairing]
+      summary: Start pairing (desktop)
+      description: |
+        Creates a short-lived pair session. No auth (rate-limit later).
+        Desktop embeds pairId + secret in a QR payload (see qr-payload.md).
+      operationId: pairStart
+      security: []
+      responses:
+        "200":
+          description: Pairing session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PairStartResponse"
+        "429":
+          $ref: "#/components/responses/TooManyRequests"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /v1/pair/complete:
+    post:
+      tags: [pairing]
+      summary: Complete pairing (phone)
+      description: Redeem pair secret once; returns device credentials.
+      operationId: pairComplete
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PairCompleteRequest"
+      responses:
+        "200":
+          description: Device bound
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PairCompleteResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /v1/pair/status:
+    get:
+      tags: [pairing]
+      summary: Pairing status (desktop)
+      operationId: pairStatus
+      security:
+        - DesktopToken: []
+      parameters:
+        - name: pairId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Current pair status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PairStatusResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /v1/pair/unpair:
+    post:
+      tags: [pairing]
+      summary: Unpair device
+      description: Clears binding. Accepts desktop or device token.
+      operationId: pairUnpair
+      security:
+        - DesktopToken: []
+        - DeviceToken: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        "200":
+          description: Unpaired
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /v1/jobs:
+    post:
+      tags: [jobs]
+      summary: Enqueue SMS job (desktop)
+      operationId: createJob
+      security:
+        - DesktopToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateJobRequest"
+      responses:
+        "200":
+          description: Job accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateJobResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /v1/jobs/pending:
+    get:
+      tags: [jobs]
+      summary: Claim pending jobs (phone)
+      description: |
+        Returns leased jobs as in_progress. Updates device lastSeenAt.
+        Phone should poll every 2–5s while paired.
+      operationId: listPendingJobs
+      security:
+        - DeviceToken: []
+      responses:
+        "200":
+          description: Claimed jobs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PendingJobsResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /v1/jobs/{jobId}/status:
+    post:
+      tags: [jobs]
+      summary: Ack job status (phone)
+      operationId: updateJobStatus
+      security:
+        - DeviceToken: []
+      parameters:
+        - $ref: "#/components/parameters/jobId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JobStatusUpdateRequest"
+      responses:
+        "200":
+          description: Status recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobStatusResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /v1/jobs/{jobId}:
+    get:
+      tags: [jobs]
+      summary: Get job status (desktop)
+      operationId: getJob
+      security:
+        - DesktopToken: []
+      parameters:
+        - $ref: "#/components/parameters/jobId"
+      responses:
+        "200":
+          description: Job snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JobStatusResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+
+  /v1/device/health:
+    get:
+      tags: [device]
+      summary: Device presence (desktop)
+      operationId: deviceHealth
+      security:
+        - DesktopToken: []
+      responses:
+        "200":
+          description: Health snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeviceHealthResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        default:
+          $ref: "#/components/responses/Error"
+
+components:
+  securitySchemes:
+    DesktopToken:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: Token issued by POST /v1/pair/start as desktopToken
+    DeviceToken:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque
+      description: Token issued by POST /v1/pair/complete as deviceToken
+
+  parameters:
+    jobId:
+      name: jobId
+      in: path
+      required: true
+      schema:
+        type: string
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      additionalProperties: false
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          additionalProperties: false
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code
+            message:
+              type: string
+              description: Human-readable explanation
+
+    PairStartResponse:
+      type: object
+      required: [pairId, secret, expiresAt, relayBaseUrl, desktopToken]
+      additionalProperties: false
+      properties:
+        pairId:
+          type: string
+        secret:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        relayBaseUrl:
+          type: string
+          format: uri
+        desktopToken:
+          type: string
+
+    PairCompleteRequest:
+      type: object
+      required: [pairId, secret]
+      additionalProperties: false
+      properties:
+        pairId:
+          type: string
+        secret:
+          type: string
+
+    PairCompleteResponse:
+      type: object
+      required: [deviceId, deviceToken]
+      additionalProperties: false
+      properties:
+        deviceId:
+          type: string
+        deviceToken:
+          type: string
+
+    PairStatusResponse:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [pending, paired, expired]
+        deviceId:
+          type: string
+          description: Present when status is paired
+
+    CreateJobRequest:
+      type: object
+      required: [to, body, clientJobId]
+      additionalProperties: false
+      properties:
+        to:
+          type: string
+          description: E.164 or digits-only destination
+        body:
+          type: string
+          description: SMS text body (text-only in v1)
+        clientJobId:
+          type: string
+          description: Desktop idempotency key for this attempt
+
+    CreateJobResponse:
+      type: object
+      required: [jobId, status]
+      additionalProperties: false
+      properties:
+        jobId:
+          type: string
+        status:
+          type: string
+          enum: [pending]
+
+    Job:
+      type: object
+      required: [jobId, to, body, clientJobId, status]
+      additionalProperties: false
+      properties:
+        jobId:
+          type: string
+        to:
+          type: string
+        body:
+          type: string
+        clientJobId:
+          type: string
+        status:
+          type: string
+          enum: [pending, in_progress, sent, failed]
+        error:
+          type: string
+          nullable: true
+
+    PendingJobsResponse:
+      type: object
+      required: [jobs]
+      additionalProperties: false
+      properties:
+        jobs:
+          type: array
+          items:
+            $ref: "#/components/schemas/Job"
+
+    JobStatusUpdateRequest:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [sent, failed]
+        error:
+          type: string
+          description: Required when status is failed (recommended)
+
+    JobStatusResponse:
+      type: object
+      required: [jobId, status]
+      additionalProperties: false
+      properties:
+        jobId:
+          type: string
+        status:
+          type: string
+          enum: [pending, in_progress, sent, failed]
+        clientJobId:
+          type: string
+        error:
+          type: string
+          nullable: true
+        updatedAt:
+          type: string
+          format: date-time
+
+    DeviceHealthResponse:
+      type: object
+      required: [online, lastSeenAt]
+      additionalProperties: false
+      properties:
+        online:
+          type: boolean
+          description: Heuristic based on lastSeenAt freshness
+        lastSeenAt:
+          type: string
+          format: date-time
+          nullable: true
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Unauthorized:
+      description: Missing or invalid token / secret
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Conflict:
+      description: State conflict (e.g. already redeemed, terminal status)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    TooManyRequests:
+      description: Rate limited
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Error:
+      description: Error envelope
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
