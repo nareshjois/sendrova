@@ -161,7 +161,7 @@ class JobPollService : Service() {
         return NotificationCompat.Builder(this, SendrovaApp.NOTIFICATION_CHANNEL_ID)
             .setContentTitle(getString(R.string.notification_title))
             .setContentText(getString(R.string.notification_text))
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.mipmap.ic_launcher_foreground)
             .setContentIntent(open)
             .setOngoing(true)
             .setSilent(true)

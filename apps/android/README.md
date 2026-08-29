@@ -92,3 +92,20 @@ apps/android/
 ## Branding
 
 Product name is **Sendrova** only (launcher label, notifications, UI).
+
+### Launcher icons
+
+Adaptive launcher assets live under `app/src/main/res/`:
+
+| Resource | Role |
+| --- | --- |
+| `mipmap-*/ic_launcher.png` | Legacy / pre-API-26 launcher |
+| `mipmap-*/ic_launcher_round.png` | Legacy roundIcon (same art; no separate round export) |
+| `mipmap-*/ic_launcher_foreground.png` | Adaptive foreground (safe-zone PNGs) |
+| `mipmap-*/ic_launcher_background.png` | Adaptive background PNGs (optional; XML uses solid color) |
+| `mipmap-anydpi-v26/ic_launcher{,_round}.xml` | Adaptive icons → `@color/ic_launcher_background` + `@mipmap/ic_launcher_foreground` |
+| `values/colors.xml` → `ic_launcher_background` | `#FFFFFF` (from icon pack) |
+
+`AndroidManifest.xml` uses `android:icon` / `android:roundIcon` → `@mipmap/ic_launcher` / `@mipmap/ic_launcher_round`.
+
+Play Store 512×512 asset: [`store/playstore-icon.png`](store/playstore-icon.png) (not packaged into the APK).

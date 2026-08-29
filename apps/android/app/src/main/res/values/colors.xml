@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <color name="ic_launcher_background">#FFFFFF</color>
     <color name="sendrova_ink">#0B1F17</color>
     <color name="sendrova_forest">#145C3E</color>
     <color name="sendrova_leaf">#2F8F63</color>
