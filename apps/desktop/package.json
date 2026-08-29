@@ -4,14 +4,15 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
-		"start": "vite build && electrobun dev",
-		"dev": "vite build && electrobun dev --watch",
+		"embed:win-icon": "bun run scripts/embed-win-icon.ts",
+		"start": "bun run embed:win-icon && vite build && electrobun dev",
+		"dev": "bun run embed:win-icon && vite build && electrobun dev --watch",
 		"dev:hmr": "concurrently \"bun run hmr\" \"bun run start:hmr\"",
-		"start:hmr": "vite build && SENDROVA_HMR=1 electrobun dev",
+		"start:hmr": "bun run embed:win-icon && vite build && SENDROVA_HMR=1 electrobun dev",
 		"hmr": "vite --port 5173",
 		"build": "vite build",
-		"build:canary": "vite build && electrobun build --env=canary",
-		"build:stable": "vite build && electrobun build --env=stable",
+		"build:canary": "bun run embed:win-icon && vite build && electrobun build --env=canary",
+		"build:stable": "bun run embed:win-icon && vite build && electrobun build --env=stable",
 		"typecheck": "tsc --noEmit",
 		"test": "bun test src/bun",
 		"lint": "biome check .",
@@ -28,7 +29,8 @@
 		"lucide-react": "^1.35.0",
 		"pino": "^10.3.1",
 		"qrcode": "^1.5.4",
-		"radix-ui": "^1.6.7"
+		"radix-ui": "^1.6.7",
+		"rcedit": "^4.0.1"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^1.9.4",

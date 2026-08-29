@@ -108,6 +108,8 @@ Platform sources under `apps/desktop` (edit these, then optionally `bun run icon
 
 **Releases are Windows-only for now.** mac/linux icon paths stay configured for later; do not expect mac/linux update pipelines yet.
 
+Electrobun 1.16's Windows CLI hardcodes a CI path to `rcedit` (`D:\a\electrobun\...`), so `bun add rcedit` alone does not fix icon embedding. Desktop scripts run `embed:win-icon` first, which uses the project's `rcedit` dependency to stamp `build.win.icon` onto Electrobun's `launcher.exe` / `bun.exe` / `extractor.exe` templates before the Electrobun copy step. Electrobun may still log a warn (baked path), but shipped binaries already carry the icon. See `apps/desktop/scripts/embed-win-icon.ts` and [electrobun#429](https://github.com/blackboardsh/electrobun/issues/429).
+
 ## Windows releases & auto-update
 
 Configured in [`packages/shared/release-config.ts`](./packages/shared/release-config.ts):
