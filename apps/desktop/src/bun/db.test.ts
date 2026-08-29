@@ -1,10 +1,19 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { safeRmSync } from "./test-fs";
 
-const dataDir = join(tmpdir(), `sendrova-db-${crypto.randomUUID()}`);
+function freshDataDir(prefix: string): string {
+	const dir = join(tmpdir(), `${prefix}-${crypto.randomUUID()}`);
+	mkdirSync(dir, { recursive: true });
+	return dir;
+}
+
+let dataDir = freshDataDir("sendrova-db");
 process.env.SENDROVA_DATA = dataDir;
+process.env.SENDROVA_TEST = "1";
+process.env.SENDROVA_SQLITE_JOURNAL = "DELETE";
 
 const {
 	closeDb,
@@ -30,15 +39,17 @@ const {
 } = await import("./db");
 
 beforeEach(() => {
-	process.env.SENDROVA_DATA = dataDir;
 	closeDb();
-	rmSync(dataDir, { recursive: true, force: true });
+	safeRmSync(dataDir);
+	dataDir = freshDataDir("sendrova-db");
+	process.env.SENDROVA_DATA = dataDir;
+	process.env.SENDROVA_TEST = "1";
 	openDb();
 });
 
 afterEach(() => {
 	closeDb();
-	rmSync(dataDir, { recursive: true, force: true });
+	safeRmSync(dataDir);
 });
 
 describe("db", () => {
@@ -47,9 +58,17 @@ describe("db", () => {
 		expect(campaign.id).toBeTruthy();
 		expect(campaign.name).toBe("Diwali blast");
 		expect(campaign.status).toBe("draft");
+		expect(campaign.channel).toBe("whatsapp");
 		expect(campaign.template_text).toBe("");
 		expect(campaign.media_kind).toBe("none");
 		expect(listCampaigns().some((c) => c.id === campaign.id)).toBe(true);
+	});
+
+	test("createCampaign accepts sms channel", () => {
+		const campaign = createCampaign({ name: "SMS blast", channel: "sms" });
+		expect(campaign.channel).toBe("sms");
+		const updated = updateCampaign(campaign.id, { channel: "whatsapp" });
+		expect(updated?.channel).toBe("whatsapp");
 	});
 
 	test("setContacts merges and never drops sent phones", () => {
@@ -195,7 +214,11 @@ describe("db", () => {
 	});
 
 	test("duplicateCampaign copies contacts without attempts", () => {
-		const campaign = createCampaign({ name: "Original", templateText: "Hi" });
+		const campaign = createCampaign({
+			name: "Original",
+			templateText: "Hi",
+			channel: "sms",
+		});
 		setContacts(campaign.id, [
 			{
 				rowIndex: 0,
@@ -218,6 +241,7 @@ describe("db", () => {
 		const copy = duplicateCampaign(campaign.id);
 		expect(copy.name).toBe("Original (copy)");
 		expect(copy.status).toBe("draft");
+		expect(copy.channel).toBe("sms");
 		expect(getContacts(copy.id)).toHaveLength(1);
 		expect(getAttempts(copy.id)).toHaveLength(0);
 		expect(getCampaign(copy.id)?.pending_count).toBe(1);

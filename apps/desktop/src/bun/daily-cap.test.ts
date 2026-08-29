@@ -1,10 +1,19 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { rmSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { safeRmSync } from "./test-fs";
 
-const dataDir = join(tmpdir(), `sendrova-cap-${crypto.randomUUID()}`);
+function freshDataDir(prefix: string): string {
+	const dir = join(tmpdir(), `${prefix}-${crypto.randomUUID()}`);
+	mkdirSync(dir, { recursive: true });
+	return dir;
+}
+
+let dataDir = freshDataDir("sendrova-cap");
 process.env.SENDROVA_DATA = dataDir;
+process.env.SENDROVA_TEST = "1";
+process.env.SENDROVA_SQLITE_JOURNAL = "DELETE";
 
 const { closeDb, createCampaign, insertAttempt, openDb, setSetting } =
 	await import("./db");
@@ -19,15 +28,17 @@ const {
 } = await import("./daily-cap");
 
 beforeEach(() => {
-	process.env.SENDROVA_DATA = dataDir;
 	closeDb();
-	rmSync(dataDir, { recursive: true, force: true });
+	safeRmSync(dataDir);
+	dataDir = freshDataDir("sendrova-cap");
+	process.env.SENDROVA_DATA = dataDir;
+	process.env.SENDROVA_TEST = "1";
 	openDb();
 });
 
 afterEach(() => {
 	closeDb();
-	rmSync(dataDir, { recursive: true, force: true });
+	safeRmSync(dataDir);
 });
 
 describe("daily-cap", () => {
