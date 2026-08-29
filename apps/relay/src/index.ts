@@ -1,4 +1,5 @@
 import { errorResponse, json } from "./errors";
+import { runGc } from "./gc";
 import { handleDeviceHealth } from "./routes/device";
 import {
 	handleCreateJob,
@@ -27,6 +28,18 @@ export default {
 		} catch (err) {
 			return errorResponse(err);
 		}
+	},
+
+	async scheduled(
+		_controller: ScheduledController,
+		env: Env,
+		ctx: ExecutionContext,
+	): Promise<void> {
+		ctx.waitUntil(
+			runGc(env).then((stats) => {
+				console.log("sms-relay gc", stats);
+			}),
+		);
 	},
 };
 

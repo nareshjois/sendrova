@@ -7,6 +7,7 @@ import {
 } from "../constants";
 import { randomId } from "../crypto";
 import { ApiError, json } from "../errors";
+import { gcDeviceJobs } from "../gc";
 import { normalizeTo } from "../phone";
 import {
 	getJob,
@@ -139,6 +140,9 @@ export async function handlePendingJobs(env: Env, req: Request): Promise<Respons
 	await touchLastSeen(env, auth.device.deviceId);
 
 	const now = Date.now();
+	// Opportunistic per-device GC (terminal TTL + abandoned leases).
+	await gcDeviceJobs(env, auth.device.deviceId, now);
+
 	const jobs = await listJobs(env, auth.device.deviceId);
 	// Stable order: oldest first
 	jobs.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));

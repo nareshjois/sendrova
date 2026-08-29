@@ -1,5 +1,20 @@
-import { SELF } from "cloudflare:test";
+import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import {
+	EXPIRED_PAIR_GC_MS,
+	JOB_ABANDON_TTL_MS,
+	JOB_TTL_MS,
+	PAIR_START_RATE_LIMIT,
+} from "../src/constants";
+import { runGc } from "../src/gc";
+import { clearPairStartRateLimit } from "../src/rate-limit";
+import {
+	clientJobIndexKey,
+	jobKey,
+	pairKey,
+	putJson,
+} from "../src/storage";
+import type { JobRecord, PairRecord } from "../src/types";
 
 async function json<T>(res: Response): Promise<T> {
 	return (await res.json()) as T;
@@ -256,5 +271,110 @@ describe("SMS relay Worker", () => {
 			headers: { Authorization: `Bearer ${complete.deviceToken}` },
 		});
 		expect(pending.status).toBe(401);
+	});
+
+	it("rate-limits POST /v1/pair/start", async () => {
+		const req = new Request("http://localhost/v1/pair/start", {
+			method: "POST",
+			headers: { "cf-connecting-ip": "203.0.113.50" },
+		});
+		await clearPairStartRateLimit(env, req);
+
+		for (let i = 0; i < PAIR_START_RATE_LIMIT; i++) {
+			const res = await SELF.fetch(
+				new Request("http://localhost/v1/pair/start", {
+					method: "POST",
+					headers: { "cf-connecting-ip": "203.0.113.50" },
+				}),
+			);
+			expect(res.status).toBe(200);
+		}
+
+		const limited = await SELF.fetch(
+			new Request("http://localhost/v1/pair/start", {
+				method: "POST",
+				headers: { "cf-connecting-ip": "203.0.113.50" },
+			}),
+		);
+		expect(limited.status).toBe(429);
+		expect((await json<{ error: { code: string } }>(limited)).error.code).toBe(
+			"RATE_LIMITED",
+		);
+
+		// Different IP still allowed
+		const other = await SELF.fetch(
+			new Request("http://localhost/v1/pair/start", {
+				method: "POST",
+				headers: { "cf-connecting-ip": "203.0.113.99" },
+			}),
+		);
+		expect(other.status).toBe(200);
+	});
+
+	it("GC deletes old terminal jobs and abandons stale in_progress", async () => {
+		const now = Date.now();
+		const deviceId = "gc-device-1";
+		const oldJobId = "old-sent-job";
+		const staleJobId = "stale-lease-job";
+
+		const oldJob: JobRecord = {
+			jobId: oldJobId,
+			deviceId,
+			clientJobId: "gc-old",
+			to: "+15550001111",
+			body: "old",
+			status: "sent",
+			error: null,
+			createdAt: new Date(now - JOB_TTL_MS - 60_000).toISOString(),
+			updatedAt: new Date(now - JOB_TTL_MS - 60_000).toISOString(),
+			leaseExpiresAt: null,
+		};
+		await putJson(env.SMS_BUCKET, jobKey(deviceId, oldJobId), oldJob);
+		await putJson(env.SMS_BUCKET, clientJobIndexKey(deviceId, "gc-old"), {
+			jobId: oldJobId,
+			to: oldJob.to,
+			body: oldJob.body,
+		});
+
+		const staleJob: JobRecord = {
+			jobId: staleJobId,
+			deviceId,
+			clientJobId: "gc-stale",
+			to: "+15550002222",
+			body: "stale",
+			status: "in_progress",
+			error: null,
+			createdAt: new Date(now - JOB_ABANDON_TTL_MS - 60_000).toISOString(),
+			updatedAt: new Date(now - JOB_ABANDON_TTL_MS - 60_000).toISOString(),
+			leaseExpiresAt: new Date(now - 60_000).toISOString(),
+		};
+		await putJson(env.SMS_BUCKET, jobKey(deviceId, staleJobId), staleJob);
+
+		const expiredPair: PairRecord = {
+			pairId: "expired-pair-gc",
+			secretHash: "x",
+			desktopTokenHash: "y",
+			status: "expired",
+			expiresAt: new Date(now - EXPIRED_PAIR_GC_MS - 60_000).toISOString(),
+			createdAt: new Date(now - EXPIRED_PAIR_GC_MS - 120_000).toISOString(),
+		};
+		await putJson(env.SMS_BUCKET, pairKey(expiredPair.pairId), expiredPair);
+
+		const stats = await runGc(env, now);
+		expect(stats.jobsDeleted).toBeGreaterThanOrEqual(1);
+		expect(stats.jobsAbandoned).toBeGreaterThanOrEqual(1);
+		expect(stats.pairsDeleted).toBeGreaterThanOrEqual(1);
+
+		expect(await env.SMS_BUCKET.get(jobKey(deviceId, oldJobId))).toBeNull();
+		expect(
+			await env.SMS_BUCKET.get(clientJobIndexKey(deviceId, "gc-old")),
+		).toBeNull();
+		expect(await env.SMS_BUCKET.get(pairKey(expiredPair.pairId))).toBeNull();
+
+		const staleObj = await env.SMS_BUCKET.get(jobKey(deviceId, staleJobId));
+		expect(staleObj).not.toBeNull();
+		const staleParsed = (await staleObj!.json()) as JobRecord;
+		expect(staleParsed.status).toBe("failed");
+		expect(staleParsed.error).toBe("LEASE_ABANDONED");
 	});
 });

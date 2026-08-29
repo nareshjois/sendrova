@@ -2,6 +2,7 @@ import { requireDesktopAuth, requireDeviceAuth, maybeExpirePair } from "../auth"
 import { PAIR_TTL_MS } from "../constants";
 import { hashSecret, mintToken, randomId, timingSafeEqual } from "../crypto";
 import { ApiError, json } from "../errors";
+import { assertPairStartAllowed } from "../rate-limit";
 import {
 	deleteKey,
 	deviceMetaKey,
@@ -17,6 +18,8 @@ import {
 import type { Env, PairRecord } from "../types";
 
 export async function handlePairStart(env: Env, req: Request): Promise<Response> {
+	await assertPairStartAllowed(env, req);
+
 	const pairId = randomId(16);
 	const secret = randomId(24);
 	const { token: desktopToken, tokenHash: desktopTokenHash } = await mintToken(

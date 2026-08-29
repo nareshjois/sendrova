@@ -11,6 +11,7 @@ cd apps/relay
 bun install
 bun run dev          # wrangler dev — local Worker + R2
 bun run test         # vitest + @cloudflare/vitest-pool-workers (miniflare)
+bun run deploy       # wrangler deploy (after secrets + R2 bucket exist)
 ```
 
 Bindings (see `wrangler.toml`):
@@ -20,7 +21,22 @@ Bindings (see `wrangler.toml`):
 | `SMS_BUCKET` | R2 bucket for pair / device / job JSON |
 | `TOKEN_SIGNING_KEY` | HMAC key for minting/verifying bearer tokens and hashing secrets |
 
-For production, set the signing key with `wrangler secret put TOKEN_SIGNING_KEY` (overrides the local `[vars]` default).
+### Production secret (`TOKEN_SIGNING_KEY`)
+
+`wrangler.toml` `[vars]` includes a **dev-only** signing key for local `wrangler dev` / vitest. **Do not rely on that value in production.**
+
+```bash
+cd apps/relay
+# Generate a long random secret, then:
+wrangler secret put TOKEN_SIGNING_KEY
+# paste the secret when prompted
+```
+
+Cloudflare secrets override `[vars]` for the same name on deployed Workers. Rotate by putting a new secret (existing tokens become invalid — devices must re-pair).
+
+Also create the R2 bucket named in `wrangler.toml` (`sendrova-sms`) in the Cloudflare dashboard (or via `wrangler r2 bucket create`) before the first deploy.
+
+Hourly cron (`0 * * * *`) runs R2 GC (expired pairs, terminal job TTL, abandoned leases).
 
 ## Curl demo (pair → job → ack)
 
@@ -77,6 +93,10 @@ sendrova://sms-pair?u=<url-encoded-relayBaseUrl>&pairId=<pairId>&secret=<secret>
 | --- | --- |
 | **Pending claim limit** | `GET /v1/jobs/pending` claims at most **5** jobs per poll (oldest `createdAt` first). |
 | **Lease TTL** | Claimed jobs stay `in_progress` for **2 minutes**. After `leaseExpiresAt`, a later poll recovers them to claimable (re-leased). |
+| **Abandoned jobs** | `pending` / `in_progress` jobs with `updatedAt` older than **24 hours** are marked `failed` (`JOB_ABANDONED` / `LEASE_ABANDONED`) by GC or opportunistic device GC on pending poll. |
+| **Job object TTL** | Terminal jobs (`sent` / `failed`) older than **7 days** are deleted from R2 (job + clientJob index). |
+| **Expired pair GC** | Expired / TTL’d pending pair records are deleted **1 hour** after `expiresAt`. |
+| **Pair start rate limit** | `POST /v1/pair/start` allows **10** requests per client IP per **15 minutes** (keyed by `CF-Connecting-IP` / `X-Forwarded-For`). Over limit → **429** `RATE_LIMITED`. |
 | **Online freshness** | `GET /v1/device/health` → `online: true` iff `lastSeenAt` is within the last **15 seconds**. Device polls (and status acks) bump `lastSeenAt`. |
 | **Error codes** | `VALIDATION_ERROR`, `UNAUTHORIZED`, `NOT_FOUND`, `CONFLICT`, `PAIR_EXPIRED`, `PAIR_REDEEMED`, `INVALID_SECRET`, `NO_DEVICE`, `JOB_TERMINAL`, `IDEMPOTENCY_CONFLICT`, `RATE_LIMITED`, `INTERNAL`. Envelope: `{ "error": { "code", "message" } }`. |
 | **clientJobId idempotency** | Same `clientJobId` + same normalized `to` + same `body` → **200** replay with the existing `jobId` (create response `status` is always `pending` per OpenAPI; use `GET /v1/jobs/{id}` for live status). Same `clientJobId` with different `to`/`body` → **409** `IDEMPOTENCY_CONFLICT`. |

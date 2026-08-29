@@ -8,6 +8,12 @@ binding = "SMS_BUCKET"
 bucket_name = "sendrova-sms"
 preview_bucket_name = "sendrova-sms-preview"
 
-# Local/dev secret — override via `wrangler secret put TOKEN_SIGNING_KEY` in production.
+# Local/dev only — NEVER ship this default to production.
+# Production: `cd apps/relay && wrangler secret put TOKEN_SIGNING_KEY`
+# (long random string). Secrets override [vars] for the same name.
 [vars]
 TOKEN_SIGNING_KEY = "dev-token-signing-key-change-me"
+
+# Hourly GC: expired pair records + terminal job TTL + abandoned leases.
+[triggers]
+crons = ["0 * * * *"]

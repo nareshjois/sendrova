@@ -1,4 +1,4 @@
-import { bearerToken, hashSecret, verifyToken } from "./crypto";
+import { bearerToken, hashSecret, timingSafeEqual, verifyToken } from "./crypto";
 import { ApiError } from "./errors";
 import {
 	getDevice,
@@ -50,7 +50,7 @@ export async function requireDesktopAuth(env: Env, req: Request): Promise<Deskto
 		throw new ApiError(401, "UNAUTHORIZED", "Unknown desktop session");
 	}
 	const tokenHash = await hashSecret(env.TOKEN_SIGNING_KEY, token);
-	if (tokenHash !== pair.desktopTokenHash) {
+	if (!timingSafeEqual(tokenHash, pair.desktopTokenHash)) {
 		throw new ApiError(401, "UNAUTHORIZED", "Desktop token revoked");
 	}
 	await maybeExpirePair(env, pair);
@@ -76,7 +76,7 @@ export async function requireDeviceAuth(env: Env, req: Request): Promise<DeviceA
 		throw new ApiError(401, "UNAUTHORIZED", "Unknown or unpaired device");
 	}
 	const tokenHash = await hashSecret(env.TOKEN_SIGNING_KEY, token);
-	if (tokenHash !== device.deviceTokenHash) {
+	if (!timingSafeEqual(tokenHash, device.deviceTokenHash)) {
 		throw new ApiError(401, "UNAUTHORIZED", "Device token revoked");
 	}
 	return { claims, device, token };
