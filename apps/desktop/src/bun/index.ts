@@ -5,7 +5,7 @@ import {
 	BrowserView,
 	BrowserWindow,
 	Updater,
-} from "electrobun/bun";
+} from "electrobun/main";
 import type {
 	AppInfoDTO,
 	AttemptDTO,

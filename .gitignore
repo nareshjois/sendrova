@@ -16,6 +16,7 @@ auth_info_baileys/
 !.env.example
 .sendrova/
 .electrobun/
+.hutch/
 artifacts/
 *.log
 .vite/
