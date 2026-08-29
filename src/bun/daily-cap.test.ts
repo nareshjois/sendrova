@@ -3,8 +3,8 @@ import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const dataDir = join(tmpdir(), `wa-sender-cap-${crypto.randomUUID()}`);
-process.env.WHATSAPP_SENDER_DATA = dataDir;
+const dataDir = join(tmpdir(), `sendrova-cap-${crypto.randomUUID()}`);
+process.env.SENDROVA_DATA = dataDir;
 
 const { closeDb, createCampaign, insertAttempt, openDb, setSetting } =
 	await import("./db");
@@ -19,7 +19,7 @@ const {
 } = await import("./daily-cap");
 
 beforeEach(() => {
-	process.env.WHATSAPP_SENDER_DATA = dataDir;
+	process.env.SENDROVA_DATA = dataDir;
 	closeDb();
 	rmSync(dataDir, { recursive: true, force: true });
 	openDb();
