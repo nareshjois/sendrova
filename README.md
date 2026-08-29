@@ -83,7 +83,7 @@ cd apps/android && gradlew.bat assembleDebug
 
 2. **Desktop relay URL:** built-in — `https://sendrova.nareshjois.com` (no trailing slash). Optional local override: `SMS_RELAY_BASE_URL=http://127.0.0.1:8787` when using `wrangler dev`.
 
-3. **Build / sideload the Android APK** — see [`apps/android/README.md`](./apps/android/README.md). Open `apps/android` in Android Studio, `assembleDebug`, `adb install`. Physical phone on the same network (or use the deployed Worker HTTPS URL).
+3. **Sideload the Android APK** — prefer `Sendrova-SMS-debug.apk` from [GitHub Releases](https://github.com/nareshjois/sendrova/releases), or build locally (`cd apps/android && gradlew.bat assembleDebug`; see [`apps/android/README.md`](./apps/android/README.md)). Physical phone; use the deployed Worker HTTPS URL (or LAN/`10.0.2.2` for local wrangler).
 
 4. **Pair:** Home → SMS → **Pair phone** → scan QR with the Android app. Badge becomes **Online** when the phone is polling. Campaigns mark SMS **sent only after the phone acks** each job.
 
@@ -106,43 +106,93 @@ Platform sources under `apps/desktop` (edit these, then optionally `bun run icon
 | `apps/desktop/linux/icon.png` | Linux icon when you build linux (`build.linux.icon`) |
 | `apps/desktop/src/mainview/assets/app-icon.png` | In-app titlebar icon |
 
-**Releases are Windows-only for now.** mac/linux icon paths stay configured for later; do not expect mac/linux update pipelines yet.
+**Desktop releases are Windows-only for now** (plus the Android SMS APK on the same GitHub Release). mac/linux icon paths stay configured for later; do not expect mac/linux Electrobun update pipelines yet.
 
 Electrobun 1.16's Windows CLI hardcodes a CI path to `rcedit` (`D:\a\electrobun\...`), so `bun add rcedit` alone does not fix icon embedding. Desktop scripts run `embed:win-icon` first, which uses the project's `rcedit` dependency to stamp `build.win.icon` onto Electrobun's `launcher.exe` / `bun.exe` / `extractor.exe` templates before the Electrobun copy step. Electrobun may still log a warn (baked path), but shipped binaries already carry the icon. See `apps/desktop/scripts/embed-win-icon.ts` and [electrobun#429](https://github.com/blackboardsh/electrobun/issues/429).
 
-## Windows releases & auto-update
+## Download Windows + Android (GitHub Releases)
+
+Prebuilt installs ship from [GitHub Releases](https://github.com/nareshjois/sendrova/releases):
+
+| Asset | What it is |
+| --- | --- |
+| `{canary\|stable}-win-x64-Sendrova-Setup-*.zip` | Windows Setup ZIP — extract `Sendrova-Setup-*.exe` and run |
+| `{canary\|stable}-win-x64-update.json` (+ matching `.tar.zst`) | Desktop auto-update payloads (leave names unchanged) |
+| `Sendrova-SMS-debug.apk` | Android SMS gateway (**debug / unsigned** — sideload with `adb install`) |
+
+SMS relay for production desktop + phone: **`https://sendrova.nareshjois.com`**. Pair from desktop Home → SMS → Pair phone, then scan with the APK.
+
+### First install & SmartScreen
+
+Electrobun does not code-sign Windows builds, and Sendrova does not ship a paid signing certificate. Windows SmartScreen often warns on `Sendrova-Setup-*.exe` (“Windows protected your PC”) for unknown/unsigned publishers. That is expected for a small, low-volume app — not proof the file is malware.
+
+**Typical Windows install:**
+
+1. Download the Setup zip from [Releases](https://github.com/nareshjois/sendrova/releases) and extract `Sendrova-Setup-*.exe`.
+2. If SmartScreen appears: **More info** → **Run anyway**.
+3. Prefer downloads from this repo’s Releases page so recipients know the source.
+
+**Optional (skip the Setup EXE):** run the app folder from a canary/stable build (`build/*-win-x64/Sendrova-*/bin/launcher`) or the matching `*-Sendrova-*.tar.zst` artifact. SmartScreen may still warn; same **More info → Run anyway** path. Self-signed certificates do not improve SmartScreen and are not used here.
+
+**Android:** install `Sendrova-SMS-debug.apk` via `adb install -r …` (or file manager sideload). Grant SMS (+ Camera for QR). Debug builds are fine for personal use; Play Store / release signing is not set up yet.
+
+## CI releases (tag push)
+
+Workflow: [`.github/workflows/release.yml`](./.github/workflows/release.yml)
+
+| Trigger | Behavior |
+| --- | --- |
+| Push tag `v*` (e.g. `v0.1.0`) | Builds **stable** desktop + debug APK; creates a GitHub Release |
+| Push tag containing `canary` (e.g. `v0.1.0-canary.1`) | Builds **canary** desktop; marks the Release as prerelease |
+| **Actions → Release → Run workflow** | Pick `canary` / `stable` and a tag name (required when not on a tag ref) |
+
+```bash
+# Example: cut a stable release from the branch you want shipped
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+CI jobs:
+
+1. **Windows (`windows-latest`)** — `bun install` + `bun run build:canary` or `build:stable` (Turbo → `@sendrova/desktop`). Uploads Electrobun files from `apps/desktop/artifacts/` **without renaming**.
+2. **Android (`ubuntu-latest` + JDK 17 + Android SDK)** — `./gradlew assembleDebug`; attaches `Sendrova-SMS-debug.apk`.
+3. **Publish** — `softprops/action-gh-release` attaches both jobs’ assets to one Release.
+
+Electrobun Windows builds are heavy (~tens of minutes). No Electrobun license token is required for the current open toolchain; builds are **unsigned** (SmartScreen as above). Bun (`1.2.19`) and Gradle caches are enabled in the workflow.
+
+### Optional Android release signing (not wired yet)
+
+To ship a signed release APK later, add repo secrets (do **not** commit keystores):
+
+| Secret | Purpose |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | Base64-encoded `.jks` / `.keystore` |
+| `ANDROID_KEYSTORE_PASSWORD` | Keystore password |
+| `ANDROID_KEY_ALIAS` | Key alias |
+| `ANDROID_KEY_PASSWORD` | Key password |
+
+Then extend the Android job to decode the keystore and run `assembleRelease`. Until then, Releases only publish the clearly named **debug** APK.
+
+### Manual publish (local Windows)
 
 Configured in [`packages/shared/release-config.ts`](./packages/shared/release-config.ts):
 
 - `GITHUB_REPO` = `nareshjois/sendrova`
 - `release.baseUrl` = `https://github.com/nareshjois/sendrova/releases/latest/download`
 
-### Publish a Windows stable update
-
 1. Bump `APP_VERSION` in `packages/shared/release-config.ts` (and `apps/desktop/package.json` if you want).
 2. On a Windows machine: `bun run build:stable`
-3. Create a **non-prerelease** GitHub Release (so `/releases/latest` resolves).
+3. Create a **non-prerelease** GitHub Release (so `/releases/latest` resolves), or use the CI tag flow above.
 4. Upload Electrobun **Windows** artifacts **without renaming**, for example:
 
    - `stable-win-x64-update.json`
    - `stable-win-x64-<hash>.tar.zst`
    - optional: `stable-win-x64-<prevHash>.patch`
+   - Setup zip from `artifacts/` if shipping first-install
 
 5. Installed apps: **About → Check for updates**
 
 The repository must stay **public** so clients can fetch update files. Dev builds (`bun start` / `electrobun dev`) run on the `dev` channel and skip applying updates.
-
-### First install & SmartScreen
-
-Electrobun does not code-sign Windows builds, and Sendrova does not ship a paid signing certificate. Windows SmartScreen often warns on `Sendrova-Setup-*.exe` (“Windows protected your PC”) for unknown/unsigned publishers. That is expected for a small, low-volume app — not proof the file is malware.
-
-**Typical install (few machines):**
-
-1. Download the Setup zip from [GitHub Releases](https://github.com/nareshjois/sendrova/releases) (e.g. `*-win-x64-Sendrova-Setup-*.zip`) and extract `Sendrova-Setup-*.exe`.
-2. If SmartScreen appears: **More info** → **Run anyway**.
-3. Prefer downloads from this repo’s Releases page so recipients know the source.
-
-**Optional (skip the Setup EXE):** unzip/run the app folder from a canary/stable build (`build/*-win-x64/Sendrova-*/bin/launcher`) or the matching `*-Sendrova-*.tar.zst` artifact. SmartScreen may still warn when launching an unsigned `launcher`/EXE; the same **More info → Run anyway** path applies. Self-signed certificates do not improve SmartScreen and are not used here.
 
 ## Features
 

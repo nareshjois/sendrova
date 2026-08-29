@@ -30,10 +30,18 @@ gradlew.bat assembleDebug
 
 Debug APK: `app/build/outputs/apk/debug/app-debug.apk`
 
+CI renames that file to **`Sendrova-SMS-debug.apk`** on [GitHub Releases](https://github.com/nareshjois/sendrova/releases) (see root README / `.github/workflows/release.yml`). Prefer the Release asset for sideload unless you are iterating on the Kotlin app.
+
 ### Sideload
 
 ```bat
 adb install -r app\build\outputs\apk\debug\app-debug.apk
+```
+
+Or, after downloading a Release:
+
+```bat
+adb install -r Sendrova-SMS-debug.apk
 ```
 
 Grant **SMS** (and **Camera** if scanning QR) when prompted. On Android 13+, allow notifications so the foreground poller stays visible.
