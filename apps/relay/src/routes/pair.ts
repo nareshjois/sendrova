@@ -7,12 +7,14 @@ import {
 	deleteKey,
 	deviceMetaKey,
 	getPair,
+	getPairWithEtag,
 	listJobs,
 	jobKey,
 	clientJobIndexKey,
 	pairKey,
 	putDevice,
 	putPair,
+	putPairIfMatch,
 	relayBaseUrlFromRequest,
 } from "../storage";
 import type { Env, PairRecord } from "../types";
@@ -62,11 +64,11 @@ export async function handlePairComplete(env: Env, req: Request): Promise<Respon
 		throw new ApiError(400, "VALIDATION_ERROR", "secret is required");
 	}
 
-	const pair = await getPair(env, body.pairId);
-	if (!pair) {
+	const row = await getPairWithEtag(env, body.pairId);
+	if (!row) {
 		throw new ApiError(404, "NOT_FOUND", "Pair session not found");
 	}
-	await maybeExpirePair(env, pair);
+	const pair = await maybeExpirePair(env, row.value);
 
 	if (pair.status === "expired") {
 		throw new ApiError(401, "PAIR_EXPIRED", "Pairing session expired");
@@ -88,6 +90,18 @@ export async function handlePairComplete(env: Env, req: Request): Promise<Respon
 	);
 	const nowIso = new Date().toISOString();
 
+	// CAS the pair → paired first so concurrent redeemers lose without orphan devices.
+	const next: PairRecord = {
+		...pair,
+		status: "paired",
+		deviceId,
+		redeemedAt: nowIso,
+	};
+	const won = await putPairIfMatch(env, next, row.etag);
+	if (!won) {
+		throw new ApiError(409, "PAIR_REDEEMED", "Pairing secret already redeemed");
+	}
+
 	await putDevice(env, {
 		deviceId,
 		pairId: pair.pairId,
@@ -96,11 +110,6 @@ export async function handlePairComplete(env: Env, req: Request): Promise<Respon
 		pairedAt: nowIso,
 		lastSeenAt: nowIso,
 	});
-
-	pair.status = "paired";
-	pair.deviceId = deviceId;
-	pair.redeemedAt = nowIso;
-	await putPair(env, pair);
 
 	return json({ deviceId, deviceToken });
 }

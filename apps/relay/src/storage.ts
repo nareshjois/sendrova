@@ -16,10 +16,25 @@ export function clientJobIndexKey(deviceId: string, clientJobId: string): string
 	return `devices/${deviceId}/clientJobs/${encodeURIComponent(clientJobId)}.json`;
 }
 
+export type JsonWithEtag<T> = {
+	value: T;
+	etag: string;
+};
+
 export async function getJson<T>(bucket: R2Bucket, key: string): Promise<T | null> {
 	const obj = await bucket.get(key);
 	if (!obj) return null;
 	return (await obj.json()) as T;
+}
+
+/** Read JSON plus object etag for optimistic concurrency. */
+export async function getJsonWithEtag<T>(
+	bucket: R2Bucket,
+	key: string,
+): Promise<JsonWithEtag<T> | null> {
+	const obj = await bucket.get(key);
+	if (!obj) return null;
+	return { value: (await obj.json()) as T, etag: obj.etag };
 }
 
 export async function putJson(
@@ -32,6 +47,38 @@ export async function putJson(
 	});
 }
 
+/**
+ * Conditional put: succeeds only if the object's etag still matches.
+ * Returns false when another writer won the race (put returns null).
+ */
+export async function putJsonIfMatch(
+	bucket: R2Bucket,
+	key: string,
+	value: unknown,
+	etag: string,
+): Promise<boolean> {
+	const result = await bucket.put(key, JSON.stringify(value), {
+		httpMetadata: { contentType: "application/json" },
+		onlyIf: { etagMatches: etag },
+	});
+	return result !== null;
+}
+
+/**
+ * Create-only put (If-None-Match: *). Returns false if the key already exists.
+ */
+export async function putJsonIfAbsent(
+	bucket: R2Bucket,
+	key: string,
+	value: unknown,
+): Promise<boolean> {
+	const result = await bucket.put(key, JSON.stringify(value), {
+		httpMetadata: { contentType: "application/json" },
+		onlyIf: new Headers({ "if-none-match": "*" }),
+	});
+	return result !== null;
+}
+
 export async function deleteKey(bucket: R2Bucket, key: string): Promise<void> {
 	await bucket.delete(key);
 }
@@ -40,8 +87,24 @@ export async function getPair(env: Env, pairId: string): Promise<PairRecord | nu
 	return getJson<PairRecord>(env.SMS_BUCKET, pairKey(pairId));
 }
 
+export async function getPairWithEtag(
+	env: Env,
+	pairId: string,
+): Promise<JsonWithEtag<PairRecord> | null> {
+	return getJsonWithEtag<PairRecord>(env.SMS_BUCKET, pairKey(pairId));
+}
+
 export async function putPair(env: Env, pair: PairRecord): Promise<void> {
 	await putJson(env.SMS_BUCKET, pairKey(pair.pairId), pair);
+}
+
+/** CAS update of a pair record; false if etag no longer matches. */
+export async function putPairIfMatch(
+	env: Env,
+	pair: PairRecord,
+	etag: string,
+): Promise<boolean> {
+	return putJsonIfMatch(env.SMS_BUCKET, pairKey(pair.pairId), pair, etag);
 }
 
 export async function getDevice(env: Env, deviceId: string): Promise<DeviceMeta | null> {
@@ -60,8 +123,30 @@ export async function getJob(
 	return getJson<JobRecord>(env.SMS_BUCKET, jobKey(deviceId, jobId));
 }
 
+export async function getJobWithEtag(
+	env: Env,
+	deviceId: string,
+	jobId: string,
+): Promise<JsonWithEtag<JobRecord> | null> {
+	return getJsonWithEtag<JobRecord>(env.SMS_BUCKET, jobKey(deviceId, jobId));
+}
+
 export async function putJob(env: Env, job: JobRecord): Promise<void> {
 	await putJson(env.SMS_BUCKET, jobKey(job.deviceId, job.jobId), job);
+}
+
+/** CAS claim/update of a job; false if another writer changed the object. */
+export async function putJobIfMatch(
+	env: Env,
+	job: JobRecord,
+	etag: string,
+): Promise<boolean> {
+	return putJsonIfMatch(
+		env.SMS_BUCKET,
+		jobKey(job.deviceId, job.jobId),
+		job,
+		etag,
+	);
 }
 
 export async function listJobs(
@@ -75,6 +160,22 @@ export async function listJobs(
 		if (!obj.key.endsWith(".json")) continue;
 		const job = await getJson<JobRecord>(env.SMS_BUCKET, obj.key);
 		if (job) jobs.push(job);
+	}
+	return jobs;
+}
+
+/** List jobs with etags for conditional claims. */
+export async function listJobsWithEtag(
+	env: Env,
+	deviceId: string,
+): Promise<JsonWithEtag<JobRecord>[]> {
+	const prefix = `devices/${deviceId}/jobs/`;
+	const listed = await env.SMS_BUCKET.list({ prefix });
+	const jobs: JsonWithEtag<JobRecord>[] = [];
+	for (const obj of listed.objects) {
+		if (!obj.key.endsWith(".json")) continue;
+		const row = await getJsonWithEtag<JobRecord>(env.SMS_BUCKET, obj.key);
+		if (row) jobs.push(row);
 	}
 	return jobs;
 }

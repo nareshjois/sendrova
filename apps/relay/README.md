@@ -41,7 +41,7 @@ Vitest injects a non-prod test key via `vitest.config.ts`. Rotate production by 
 
 Also create the R2 bucket named in `wrangler.toml` (`sendrova-sms`) in the Cloudflare dashboard (or via `wrangler r2 bucket create`) before the first deploy.
 
-Hourly cron (`0 * * * *`) runs R2 GC (expired pairs, terminal job TTL, abandoned leases).
+Hourly cron (`0 * * * *`) runs R2 GC (expired pairs, terminal job TTL, abandoned leases, stale pair-start rate-limit meta).
 
 ## Curl demo (pair → job → ack)
 
@@ -96,15 +96,16 @@ sendrova://sms-pair?u=<url-encoded-relayBaseUrl>&pairId=<pairId>&secret=<secret>
 
 | Topic | Default |
 | --- | --- |
-| **Pending claim limit** | `GET /v1/jobs/pending` claims at most **5** jobs per poll (oldest `createdAt` first). |
+| **Pending claim limit** | `GET /v1/jobs/pending` claims at most **5** jobs per poll (oldest `createdAt` first). Claims use R2 **etag / onlyIf** so overlapping polls cannot double-lease the same job. |
 | **Lease TTL** | Claimed jobs stay `in_progress` for **2 minutes**. After `leaseExpiresAt`, a later poll recovers them to claimable (re-leased). |
 | **Abandoned jobs** | `pending` / `in_progress` jobs with `updatedAt` older than **24 hours** are marked `failed` (`JOB_ABANDONED` / `LEASE_ABANDONED`) by GC or opportunistic device GC on pending poll. |
 | **Job object TTL** | Terminal jobs (`sent` / `failed`) older than **7 days** are deleted from R2 (job + clientJob index). |
 | **Expired pair GC** | Expired / TTL’d pending pair records are deleted **1 hour** after `expiresAt`. |
-| **Pair start rate limit** | `POST /v1/pair/start` allows **10** requests per client IP per **15 minutes** (keyed by `CF-Connecting-IP` / `X-Forwarded-For`). Over limit → **429** `RATE_LIMITED`. |
+| **Pair start rate limit** | `POST /v1/pair/start` allows **10** requests per client IP per **15 minutes** (keyed by `CF-Connecting-IP` / `X-Forwarded-For`). Over limit → **429** `RATE_LIMITED`. Stale `meta/rate/pair-start/*` windows are GC’d after the window elapses. |
 | **Online freshness** | `GET /v1/device/health` → `online: true` iff `lastSeenAt` is within the last **15 seconds**. Device polls (and status acks) bump `lastSeenAt`. |
 | **Error codes** | `VALIDATION_ERROR`, `UNAUTHORIZED`, `NOT_FOUND`, `CONFLICT`, `PAIR_EXPIRED`, `PAIR_REDEEMED`, `INVALID_SECRET`, `NO_DEVICE`, `JOB_TERMINAL`, `IDEMPOTENCY_CONFLICT`, `RATE_LIMITED`, `INTERNAL`. Envelope: `{ "error": { "code", "message" } }`. |
-| **clientJobId idempotency** | Same `clientJobId` + same normalized `to` + same `body` → **200** replay with the existing `jobId` (create response `status` is always `pending` per OpenAPI; use `GET /v1/jobs/{id}` for live status). Same `clientJobId` with different `to`/`body` → **409** `IDEMPOTENCY_CONFLICT`. |
+| **clientJobId idempotency** | Same `clientJobId` + same normalized `to` + same `body` → **200** replay with the existing `jobId` (create response `status` is always `pending` per OpenAPI; use `GET /v1/jobs/{id}` for live status). Same `clientJobId` with different `to`/`body` → **409** `IDEMPOTENCY_CONFLICT`. Index writes use **If-None-Match** so parallel creates cannot mint two jobs for one key. |
+| **Pair redeem concurrency** | `POST /v1/pair/complete` CAS-updates the pair object (etag match) before writing device meta, so concurrent redeemers get **409** `PAIR_REDEEMED` instead of two devices. |
 | **1:1 desktop↔device** | Each `POST /v1/pair/start` creates one desktop session (`desktopToken` subject = `pairId`). Completing binds **one** device to that session. Unpair deletes the device, jobs, and pair record (revokes both tokens). Re-pair = new `pair/start`. |
 | **relayBaseUrl** | Derived from the incoming request: `{scheme}//{host}` with **no trailing slash** (e.g. `http://127.0.0.1:8787`). |
 | **`to` normalization** | Strip spaces/dashes/parentheses; keep leading `+` as E.164 (`+` + digits); otherwise digits-only. Length **7–15** digits. Invalid → 400 `VALIDATION_ERROR`. |

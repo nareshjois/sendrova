@@ -2,6 +2,7 @@ import {
 	EXPIRED_PAIR_GC_MS,
 	JOB_ABANDON_TTL_MS,
 	JOB_TTL_MS,
+	PAIR_START_RATE_WINDOW_MS,
 } from "./constants";
 import {
 	clientJobIndexKey,
@@ -18,24 +19,63 @@ export interface GcStats {
 	pairsDeleted: number;
 	jobsDeleted: number;
 	jobsAbandoned: number;
+	rateLimitMetaDeleted: number;
 }
+
+interface RateWindow {
+	windowStart: number;
+	count: number;
+}
+
+const RATE_LIMIT_PREFIX = "meta/rate/pair-start/";
 
 /**
  * Garbage-collect expired pair sessions and old job objects.
- * Also marks abandoned pending/in_progress jobs as failed.
+ * Also marks abandoned pending/in_progress jobs as failed and
+ * deletes stale pair-start rate-limit windows.
  */
 export async function runGc(env: Env, now = Date.now()): Promise<GcStats> {
 	const stats: GcStats = {
 		pairsDeleted: 0,
 		jobsDeleted: 0,
 		jobsAbandoned: 0,
+		rateLimitMetaDeleted: 0,
 	};
 
 	stats.pairsDeleted += await gcExpiredPairs(env, now);
 	const jobStats = await gcJobs(env, now);
 	stats.jobsDeleted += jobStats.deleted;
 	stats.jobsAbandoned += jobStats.abandoned;
+	stats.rateLimitMetaDeleted += await gcRateLimitMeta(env, now);
 	return stats;
+}
+
+async function gcRateLimitMeta(env: Env, now: number): Promise<number> {
+	let deleted = 0;
+	let cursor: string | undefined;
+	do {
+		const listed = await env.SMS_BUCKET.list({
+			prefix: RATE_LIMIT_PREFIX,
+			cursor,
+			limit: 100,
+		});
+		for (const obj of listed.objects) {
+			if (!obj.key.endsWith(".json")) continue;
+			const window = await getJson<RateWindow>(env.SMS_BUCKET, obj.key);
+			if (!window) {
+				await deleteKey(env.SMS_BUCKET, obj.key);
+				deleted += 1;
+				continue;
+			}
+			// Drop windows that can no longer affect the fixed-window limit.
+			if (now - window.windowStart >= PAIR_START_RATE_WINDOW_MS) {
+				await deleteKey(env.SMS_BUCKET, obj.key);
+				deleted += 1;
+			}
+		}
+		cursor = listed.truncated ? listed.cursor : undefined;
+	} while (cursor);
+	return deleted;
 }
 
 async function gcExpiredPairs(env: Env, now: number): Promise<number> {

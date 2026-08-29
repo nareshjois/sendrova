@@ -5,6 +5,7 @@ import {
 	JOB_ABANDON_TTL_MS,
 	JOB_TTL_MS,
 	PAIR_START_RATE_LIMIT,
+	PAIR_START_RATE_WINDOW_MS,
 } from "../src/constants";
 import { runGc } from "../src/gc";
 import { clearPairStartRateLimit } from "../src/rate-limit";
@@ -360,16 +361,24 @@ describe("SMS relay Worker", () => {
 		};
 		await putJson(env.SMS_BUCKET, pairKey(expiredPair.pairId), expiredPair);
 
+		const staleRateKey = "meta/rate/pair-start/stale-gc-test.json";
+		await putJson(env.SMS_BUCKET, staleRateKey, {
+			windowStart: now - PAIR_START_RATE_WINDOW_MS - 1_000,
+			count: 3,
+		});
+
 		const stats = await runGc(env, now);
 		expect(stats.jobsDeleted).toBeGreaterThanOrEqual(1);
 		expect(stats.jobsAbandoned).toBeGreaterThanOrEqual(1);
 		expect(stats.pairsDeleted).toBeGreaterThanOrEqual(1);
+		expect(stats.rateLimitMetaDeleted).toBeGreaterThanOrEqual(1);
 
 		expect(await env.SMS_BUCKET.get(jobKey(deviceId, oldJobId))).toBeNull();
 		expect(
 			await env.SMS_BUCKET.get(clientJobIndexKey(deviceId, "gc-old")),
 		).toBeNull();
 		expect(await env.SMS_BUCKET.get(pairKey(expiredPair.pairId))).toBeNull();
+		expect(await env.SMS_BUCKET.get(staleRateKey)).toBeNull();
 
 		const staleObj = await env.SMS_BUCKET.get(jobKey(deviceId, staleJobId));
 		expect(staleObj).not.toBeNull();

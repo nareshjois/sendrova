@@ -10,11 +10,15 @@ import { ApiError, json } from "../errors";
 import { gcDeviceJobs } from "../gc";
 import { normalizeTo } from "../phone";
 import {
+	deleteKey,
 	getJob,
+	getJobWithEtag,
 	getJson,
-	listJobs,
+	jobKey,
+	listJobsWithEtag,
 	putJob,
-	putJson,
+	putJobIfMatch,
+	putJsonIfAbsent,
 	clientJobIndexKey,
 	touchLastSeen,
 } from "../storage";
@@ -51,6 +55,32 @@ function isLeaseStale(job: JobRecord, now: number): boolean {
 	if (job.status !== "in_progress") return false;
 	if (!job.leaseExpiresAt) return true;
 	return Date.parse(job.leaseExpiresAt) <= now;
+}
+
+async function resolveExistingClientJob(
+	env: Env,
+	deviceId: string,
+	clientJobId: string,
+	to: string,
+	body: string,
+): Promise<Response | null> {
+	const indexKey = clientJobIndexKey(deviceId, clientJobId);
+	const existingIndex = await getJson<ClientJobIndex>(env.SMS_BUCKET, indexKey);
+	if (!existingIndex) return null;
+	const existing = await getJob(env, deviceId, existingIndex.jobId);
+	if (!existing) {
+		// Orphan index: drop and allow a fresh create.
+		await deleteKey(env.SMS_BUCKET, indexKey);
+		return null;
+	}
+	if (existing.to === to && existing.body === body) {
+		return json({ jobId: existing.jobId, status: "pending" as const });
+	}
+	throw new ApiError(
+		409,
+		"IDEMPOTENCY_CONFLICT",
+		"clientJobId already used with different to/body",
+	);
 }
 
 export async function handleCreateJob(env: Env, req: Request): Promise<Response> {
@@ -95,21 +125,15 @@ export async function handleCreateJob(env: Env, req: Request): Promise<Response>
 	const clientJobId = body.clientJobId.trim();
 	const deviceId = auth.device.deviceId;
 	const indexKey = clientJobIndexKey(deviceId, clientJobId);
-	const existingIndex = await getJson<ClientJobIndex>(env.SMS_BUCKET, indexKey);
-	if (existingIndex) {
-		const existing = await getJob(env, deviceId, existingIndex.jobId);
-		if (existing) {
-			if (existing.to === to && existing.body === body.body) {
-				// Idempotent replay
-				return json({ jobId: existing.jobId, status: "pending" as const });
-			}
-			throw new ApiError(
-				409,
-				"IDEMPOTENCY_CONFLICT",
-				"clientJobId already used with different to/body",
-			);
-		}
-	}
+
+	const early = await resolveExistingClientJob(
+		env,
+		deviceId,
+		clientJobId,
+		to,
+		body.body,
+	);
+	if (early) return early;
 
 	const nowIso = new Date().toISOString();
 	const jobId = randomId(16);
@@ -125,12 +149,32 @@ export async function handleCreateJob(env: Env, req: Request): Promise<Response>
 		updatedAt: nowIso,
 		leaseExpiresAt: null,
 	};
+
+	// Write job first, then claim the idempotency index with If-None-Match.
+	// If another create wins the index, delete our orphan job and replay.
 	await putJob(env, job);
-	await putJson(env.SMS_BUCKET, indexKey, {
+	const indexed = await putJsonIfAbsent(env.SMS_BUCKET, indexKey, {
 		jobId,
 		to,
 		body: body.body,
 	} satisfies ClientJobIndex);
+
+	if (!indexed) {
+		await deleteKey(env.SMS_BUCKET, jobKey(deviceId, jobId));
+		const replay = await resolveExistingClientJob(
+			env,
+			deviceId,
+			clientJobId,
+			to,
+			body.body,
+		);
+		if (replay) return replay;
+		throw new ApiError(
+			409,
+			"IDEMPOTENCY_CONFLICT",
+			"clientJobId already used with different to/body",
+		);
+	}
 
 	return json({ jobId, status: "pending" as const });
 }
@@ -143,12 +187,14 @@ export async function handlePendingJobs(env: Env, req: Request): Promise<Respons
 	// Opportunistic per-device GC (terminal TTL + abandoned leases).
 	await gcDeviceJobs(env, auth.device.deviceId, now);
 
-	const jobs = await listJobs(env, auth.device.deviceId);
+	const jobs = await listJobsWithEtag(env, auth.device.deviceId);
 	// Stable order: oldest first
-	jobs.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+	jobs.sort(
+		(a, b) => Date.parse(a.value.createdAt) - Date.parse(b.value.createdAt),
+	);
 
 	const claimed: JobRecord[] = [];
-	for (const job of jobs) {
+	for (const { value: job, etag } of jobs) {
 		if (claimed.length >= PENDING_CLAIM_LIMIT) break;
 
 		let claimable = job.status === "pending";
@@ -165,7 +211,9 @@ export async function handlePendingJobs(env: Env, req: Request): Promise<Respons
 			updatedAt: new Date(now).toISOString(),
 			error: null,
 		};
-		await putJob(env, updated);
+		// Optimistic claim: skip if another poll already leased this object.
+		const won = await putJobIfMatch(env, updated, etag);
+		if (!won) continue;
 		claimed.push(updated);
 	}
 
@@ -210,28 +258,44 @@ export async function handleUpdateJobStatus(
 		);
 	}
 
-	const job = await getJob(env, auth.device.deviceId, jobId);
-	if (!job) {
+	const row = await getJobWithEtag(env, auth.device.deviceId, jobId);
+	if (!row) {
 		throw new ApiError(404, "NOT_FOUND", "Job not found");
 	}
 
 	const terminal: JobStatus[] = ["sent", "failed"];
-	if (terminal.includes(job.status)) {
-		if (job.status === body.status && (job.error ?? null) === error) {
+	if (terminal.includes(row.value.status)) {
+		if (row.value.status === body.status && (row.value.error ?? null) === error) {
 			// Idempotent identical ack
-			return json(jobStatusResponse(job));
+			return json(jobStatusResponse(row.value));
 		}
 		throw new ApiError(409, "JOB_TERMINAL", "Job already in a terminal status");
 	}
 
 	const nowIso = new Date().toISOString();
-	job.status = body.status;
-	job.error = error;
-	job.leaseExpiresAt = null;
-	job.updatedAt = nowIso;
-	await putJob(env, job);
+	const updated: JobRecord = {
+		...row.value,
+		status: body.status,
+		error,
+		leaseExpiresAt: null,
+		updatedAt: nowIso,
+	};
+	const won = await putJobIfMatch(env, updated, row.etag);
+	if (!won) {
+		// Concurrent terminal write — re-read and treat as idempotent/conflict.
+		const again = await getJob(env, auth.device.deviceId, jobId);
+		if (
+			again &&
+			terminal.includes(again.status) &&
+			again.status === body.status &&
+			(again.error ?? null) === error
+		) {
+			return json(jobStatusResponse(again));
+		}
+		throw new ApiError(409, "JOB_TERMINAL", "Job already in a terminal status");
+	}
 
-	return json(jobStatusResponse(job));
+	return json(jobStatusResponse(updated));
 }
 
 export async function handleGetJob(
