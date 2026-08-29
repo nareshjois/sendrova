@@ -6,9 +6,12 @@ import android.app.NotificationManager
 import android.os.Build
 import dev.sendrova.sms.data.CredentialStore
 import dev.sendrova.sms.data.RelayApiClient
+import dev.sendrova.sms.data.SentJobStore
 
 class SendrovaApp : Application() {
     lateinit var credentials: CredentialStore
+        private set
+    lateinit var sentJobs: SentJobStore
         private set
     lateinit var api: RelayApiClient
         private set
@@ -16,6 +19,7 @@ class SendrovaApp : Application() {
     override fun onCreate() {
         super.onCreate()
         credentials = CredentialStore(this)
+        sentJobs = SentJobStore(this)
         api = RelayApiClient()
         ensureNotificationChannel()
     }

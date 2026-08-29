@@ -92,6 +92,7 @@ class JobPollService : Service() {
             if (e.httpStatus == 401) {
                 publishEvent("Unauthorized — unpair and pair again")
                 app.credentials.clear()
+                app.sentJobs.clear()
                 stopSelfSafely()
             } else {
                 publishEvent("Pending fetch failed: ${e.message}")
@@ -104,15 +105,19 @@ class JobPollService : Service() {
         }
 
         for (job in pending.jobs) {
+            // Modem already sent this job; ack failed / lease reclaimed — ack only, do not re-send.
+            if (app.sentJobs.contains(job.jobId)) {
+                publishEvent("Re-acking previously sent job ${job.jobId}")
+                ackSent(app, base, token, job.jobId)
+                continue
+            }
+
             publishEvent("Sending job ${job.jobId} → ${job.to}")
             when (val result = sender.send(job.to, job.body)) {
                 is SmsSender.Result.Sent -> {
-                    try {
-                        app.api.updateJobStatus(base, token, job.jobId, status = "sent")
-                        publishEvent("Sent job ${job.jobId}")
-                    } catch (e: RelayApiException) {
-                        publishEvent("Ack sent failed for ${job.jobId}: ${e.message}")
-                    }
+                    // Persist before ack so a failed ack cannot cause a second SMS.
+                    app.sentJobs.markSent(job.jobId)
+                    ackSent(app, base, token, job.jobId)
                 }
                 is SmsSender.Result.Failed -> {
                     try {
@@ -129,6 +134,20 @@ class JobPollService : Service() {
                     }
                 }
             }
+        }
+    }
+
+    private suspend fun ackSent(
+        app: SendrovaApp,
+        base: String,
+        token: String,
+        jobId: String,
+    ) {
+        try {
+            app.api.updateJobStatus(base, token, jobId, status = "sent")
+            publishEvent("Sent job $jobId")
+        } catch (e: RelayApiException) {
+            publishEvent("Ack sent failed for $jobId: ${e.message}")
         }
     }
 
@@ -186,7 +205,8 @@ class JobPollService : Service() {
         }
 
         fun stop(context: Context) {
-            context.stopService(Intent(context, JobPollService::class.java))
+            val intent = Intent(context, JobPollService::class.java).setAction(ACTION_STOP)
+            context.startService(intent)
         }
     }
 }

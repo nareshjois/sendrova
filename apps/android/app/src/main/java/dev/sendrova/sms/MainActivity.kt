@@ -206,6 +206,7 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             app.credentials.clear()
+            app.sentJobs.clear()
             toast(getString(R.string.unpaired_ok))
             binding.eventValue.text = getString(R.string.unpaired_ok)
             refreshUi()
