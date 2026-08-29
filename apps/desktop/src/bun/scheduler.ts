@@ -11,6 +11,7 @@ import {
 	type CampaignStatus,
 	type Contact,
 	type MediaKind,
+	type MessageChannelKind,
 	type PausedReason,
 } from "./db";
 import {
@@ -21,11 +22,9 @@ import {
 } from "./daily-cap";
 import { renderTemplate } from "./template";
 import {
-	resolveJid,
-	sendImage,
-	sendText,
-	sendVideo,
-} from "./whatsapp-session";
+	getMessageChannel,
+	WhatsAppNotOnNetworkError,
+} from "./channels";
 
 export type CampaignProgress = {
 	campaignId: string;
@@ -221,21 +220,8 @@ function alreadySentPhones(campaignId: string): Set<string> {
 	return sent;
 }
 
-async function sendForContact(
-	jid: string,
-	body: string,
-	mediaKind: MediaKind,
-	mediaPath: string | null,
-): Promise<void> {
-	if (mediaKind === "image" && mediaPath) {
-		await sendImage(jid, mediaPath, body);
-		return;
-	}
-	if (mediaKind === "video" && mediaPath) {
-		await sendVideo(jid, mediaPath, body);
-		return;
-	}
-	await sendText(jid, body);
+function normalizeChannel(channel: string | null | undefined): MessageChannelKind {
+	return channel === "sms" ? "sms" : "whatsapp";
 }
 
 /**
@@ -251,6 +237,16 @@ export async function startCampaign(campaignId: string): Promise<void> {
 	const campaign = getCampaign(campaignId);
 	if (!campaign) {
 		throw new Error(`Campaign not found: ${campaignId}`);
+	}
+
+	const channelKind = normalizeChannel(campaign.channel);
+	const channel = getMessageChannel(channelKind);
+	if (!(await channel.isReady())) {
+		throw new Error(
+			channelKind === "sms"
+				? "SMS phone gateway is not ready (pair a phone or use mock mode)"
+				: "WhatsApp is not connected",
+		);
 	}
 
 	const contacts = getContacts(campaignId).filter((c) => c.valid === 1 && c.phone);
@@ -290,8 +286,9 @@ export async function startCampaign(campaignId: string): Promise<void> {
 	emitProgress(state, "running");
 
 	void runCampaign(state, pendingContacts, campaign.template_text, {
-		mediaKind: campaign.media_kind,
-		mediaPath: campaign.media_path,
+		mediaKind: channelKind === "sms" ? "none" : campaign.media_kind,
+		mediaPath: channelKind === "sms" ? null : campaign.media_path,
+		channelKind,
 	}).catch((err) => {
 		console.error("[scheduler] campaign crashed", campaignId, err);
 		state.lastError = err instanceof Error ? err.message : String(err);
@@ -305,8 +302,13 @@ async function runCampaign(
 	state: RunnerState,
 	contacts: Contact[],
 	template: string,
-	media: { mediaKind: MediaKind; mediaPath: string | null },
+	media: {
+		mediaKind: MediaKind;
+		mediaPath: string | null;
+		channelKind: MessageChannelKind;
+	},
 ): Promise<void> {
+	const channel = getMessageChannel(media.channelKind);
 	try {
 		for (let i = 0; i < contacts.length; i++) {
 			if (state.stopped) break;
@@ -372,8 +374,30 @@ async function runCampaign(
 					break;
 				}
 
-				const jid = await resolveJid(contact.phone);
-				if (!jid) {
+				const result = await channel.send({
+					to: contact.phone,
+					body: rendered,
+					mediaKind: media.mediaKind,
+					mediaPath: media.mediaPath,
+					clientJobId: attempt.id,
+				});
+
+				// Phase 1: SMS marks sent on enqueue/mock accept (not phone ack).
+				// Phase 2: call channel.waitUntilSent(result.remoteJobId) before marking sent.
+				void result.remoteJobId;
+
+				updateAttempt(attempt.id, {
+					status: "sent",
+					error: null,
+					finishedAt: new Date().toISOString(),
+				});
+				state.rowStatuses[contact.phone] = "sent";
+				state.sent += 1;
+				state.pending = Math.max(0, state.pending - 1);
+				syncCampaignCounts(state, "running");
+				emitProgress(state, "running");
+			} catch (err) {
+				if (err instanceof WhatsAppNotOnNetworkError) {
 					updateAttempt(attempt.id, {
 						status: "skipped",
 						error: "not on WhatsApp",
@@ -387,24 +411,6 @@ async function runCampaign(
 					continue;
 				}
 
-				await sendForContact(
-					jid,
-					rendered,
-					media.mediaKind,
-					media.mediaPath,
-				);
-
-				updateAttempt(attempt.id, {
-					status: "sent",
-					error: null,
-					finishedAt: new Date().toISOString(),
-				});
-				state.rowStatuses[contact.phone] = "sent";
-				state.sent += 1;
-				state.pending = Math.max(0, state.pending - 1);
-				syncCampaignCounts(state, "running");
-				emitProgress(state, "running");
-			} catch (err) {
 				const message = err instanceof Error ? err.message : String(err);
 				state.lastError = message;
 				updateAttempt(attempt.id, {

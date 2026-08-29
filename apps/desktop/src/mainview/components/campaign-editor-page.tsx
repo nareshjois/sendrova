@@ -6,6 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
+import {
 	Table,
 	TableBody,
 	TableCell,
@@ -27,9 +34,13 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
 	CampaignDTO,
+	CampaignStatus,
+	ConnectionStatus,
 	DeliveryStatus,
 	ImportResultDTO,
 	ImportRowDTO,
+	MessageChannelKind,
+	SmsConnectionDTO,
 	TemplateValidationDTO,
 } from "shared/rpc";
 
@@ -130,6 +141,8 @@ export function CampaignEditorPage({
 	const [campaignId, setCampaignId] = useState<string | null>(initialCampaignId);
 	const [name, setName] = useState("Untitled campaign");
 	const [template, setTemplate] = useState(DEFAULT_TEMPLATE);
+	const [channel, setChannel] = useState<MessageChannelKind>("whatsapp");
+	const [campaignStatus, setCampaignStatus] = useState<CampaignStatus>("draft");
 	const [pasteText, setPasteText] = useState("");
 	const [sourceFilename, setSourceFilename] = useState<string | undefined>();
 	const [importResult, setImportResult] = useState<ImportResultDTO | null>(null);
@@ -145,6 +158,10 @@ export function CampaignEditorPage({
 	const [busy, setBusy] = useState(false);
 	const [booting, setBooting] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const [waStatus, setWaStatus] = useState<ConnectionStatus>("disconnected");
+	const [smsConnection, setSmsConnection] = useState<SmsConnectionDTO | null>(
+		null,
+	);
 
 	const rows = importResult?.rows ?? [];
 	const columns = importResult?.columns ?? [];
@@ -180,8 +197,50 @@ export function CampaignEditorPage({
 		setCampaignId(c.id);
 		setName(c.name);
 		setTemplate(c.template_text || DEFAULT_TEMPLATE);
+		setChannel(c.channel === "sms" ? "sms" : "whatsapp");
+		setCampaignStatus(c.status);
 		setMediaKind(c.media_kind);
 		if (c.source_filename) setSourceFilename(c.source_filename);
+	}, []);
+
+	const channelReady = useMemo(() => {
+		if (channel === "sms") {
+			return Boolean(smsConnection?.ready);
+		}
+		return waStatus === "connected";
+	}, [channel, smsConnection?.ready, waStatus]);
+
+	const startBlockedReason = useMemo(() => {
+		if (!firstValid) return "Add at least one valid contact";
+		if (channel === "sms") {
+			if (!smsConnection?.ready) {
+				return smsConnection?.mode === "live"
+					? "Pair an SMS phone gateway first"
+					: "SMS channel is not ready";
+			}
+			return null;
+		}
+		if (waStatus !== "connected") return "Connect WhatsApp before starting";
+		return null;
+	}, [firstValid, channel, smsConnection, waStatus]);
+
+	useEffect(() => {
+		let cancelled = false;
+		electrobun.rpc?.request
+			.getConnectionStatus({})
+			.then((s) => {
+				if (!cancelled) setWaStatus(s);
+			})
+			.catch(() => undefined);
+		electrobun.rpc?.request
+			.getSmsConnection({})
+			.then((s) => {
+				if (!cancelled) setSmsConnection(s);
+			})
+			.catch(() => undefined);
+		return () => {
+			cancelled = true;
+		};
 	}, []);
 
 	useEffect(() => {
@@ -227,7 +286,10 @@ export function CampaignEditorPage({
 						).length,
 					};
 					setImportResult(asImport);
-					if (detail.campaign.media_kind !== "none") {
+					if (
+						detail.campaign.channel !== "sms" &&
+						detail.campaign.media_kind !== "none"
+					) {
 						const previewMedia =
 							await electrobun.rpc!.request.readMediaPreview({
 								campaignId: detail.campaign.id,
@@ -238,6 +300,7 @@ export function CampaignEditorPage({
 					const created = await electrobun.rpc!.request.createCampaign({
 						name: "Untitled campaign",
 						templateText: DEFAULT_TEMPLATE,
+						channel: "whatsapp",
 					});
 					if (cancelled) return;
 					applyCampaign(created);
@@ -329,12 +392,14 @@ export function CampaignEditorPage({
 		setBusy(true);
 		setError(null);
 		try {
-			await electrobun.rpc!.request.updateCampaign({
+			const updated = await electrobun.rpc!.request.updateCampaign({
 				id: campaignId,
 				name: name.trim() || "Untitled campaign",
 				templateText: template,
 				sourceFilename: sourceFilename ?? null,
+				...(campaignStatus === "draft" ? { channel } : {}),
 			});
+			applyCampaign(updated);
 			if (importResult) {
 				await electrobun.rpc!.request.setCampaignContacts({
 					campaignId,
@@ -351,8 +416,35 @@ export function CampaignEditorPage({
 		}
 	}
 
+	async function handleChannelChange(next: MessageChannelKind) {
+		if (campaignStatus !== "draft") return;
+		setChannel(next);
+		if (next === "sms") {
+			setMediaKind("none");
+			setMediaPreview(null);
+		}
+		if (!campaignId) return;
+		setBusy(true);
+		setError(null);
+		try {
+			const updated = await electrobun.rpc!.request.updateCampaign({
+				id: campaignId,
+				channel: next,
+			});
+			applyCampaign(updated);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setBusy(false);
+		}
+	}
+
 	async function handleStart() {
 		if (!campaignId) return;
+		if (startBlockedReason) {
+			setError(startBlockedReason);
+			return;
+		}
 		const ok = await save();
 		if (!ok) return;
 		setBusy(true);
@@ -422,17 +514,39 @@ export function CampaignEditorPage({
 								{initialCampaignId ? "Edit campaign" : "New campaign"}
 							</h1>
 							<p className="text-sm text-muted-foreground">
-								Template, contacts, and optional media
+								{channel === "sms"
+									? "Template and contacts (SMS is text-only)"
+									: "Template, contacts, and optional media"}
 							</p>
 						</div>
-						<div className="w-full max-w-sm space-y-2 sm:w-72">
-							<Label htmlFor="campaign-name">Name</Label>
-							<Input
-								id="campaign-name"
-								value={name}
-								onChange={(e) => setName(e.target.value)}
-								placeholder="Campaign name"
-							/>
+						<div className="flex w-full flex-wrap gap-3 sm:w-auto">
+							<div className="w-full space-y-2 sm:w-44">
+								<Label htmlFor="campaign-channel">Channel</Label>
+								<Select
+									value={channel}
+									disabled={busy || campaignStatus !== "draft"}
+									onValueChange={(v) =>
+										void handleChannelChange(v as MessageChannelKind)
+									}
+								>
+									<SelectTrigger id="campaign-channel" className="w-full">
+										<SelectValue placeholder="Channel" />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="whatsapp">WhatsApp</SelectItem>
+										<SelectItem value="sms">SMS</SelectItem>
+									</SelectContent>
+								</Select>
+							</div>
+							<div className="w-full max-w-sm space-y-2 sm:w-72">
+								<Label htmlFor="campaign-name">Name</Label>
+								<Input
+									id="campaign-name"
+									value={name}
+									onChange={(e) => setName(e.target.value)}
+									placeholder="Campaign name"
+								/>
+							</div>
 						</div>
 					</div>
 
@@ -469,6 +583,7 @@ export function CampaignEditorPage({
 									)}
 							</div>
 
+							{channel !== "sms" && (
 							<Card>
 								<CardHeader className="pb-3">
 									<CardTitle className="text-base">Media</CardTitle>
@@ -526,6 +641,17 @@ export function CampaignEditorPage({
 									)}
 								</CardContent>
 							</Card>
+							)}
+
+							{channel === "sms" && (
+								<p className="text-xs text-muted-foreground">
+									{smsConnection?.mode === "mock"
+										? "SMS mock mode is ready (no SMS_RELAY_BASE_URL). Pairing UI comes in Phase 2."
+										: smsConnection?.ready
+											? "SMS phone gateway is paired."
+											: "Pair a phone gateway before starting (Phase 2 QR polish)."}
+								</p>
+							)}
 
 							{preview && (
 								<Card>
@@ -669,7 +795,8 @@ export function CampaignEditorPage({
 					Save
 				</Button>
 				<Button
-					disabled={busy || !campaignId || !firstValid}
+					disabled={busy || !campaignId || !firstValid || !channelReady}
+					title={startBlockedReason ?? undefined}
 					onClick={() => void handleStart()}
 				>
 					Start

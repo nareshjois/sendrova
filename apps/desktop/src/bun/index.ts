@@ -15,7 +15,9 @@ import type {
 	ImportResultDTO,
 	ImportRowDTO,
 	MainRPC,
+	MessageChannelKind,
 	SettingsDTO,
+	SmsConnectionDTO,
 	UpdateCheckDTO,
 } from "@sendrova/shared/rpc";
 import {
@@ -25,6 +27,16 @@ import {
 	GITHUB_REPO,
 	releaseBaseUrl,
 } from "@sendrova/shared/release-config";
+import {
+	fetchSmsDeviceHealth,
+	getMessageChannel,
+	isSmsMockMode,
+	readSmsRelayState,
+	refreshSmsPairStatus,
+	resolveSmsRelayBaseUrl,
+	startSmsPairing,
+	unpairSms,
+} from "./channels";
 import {
 	getLocalDayBounds,
 	getRemainingToday,
@@ -105,6 +117,7 @@ function toCampaignDto(row: Campaign): CampaignDTO {
 		finished_at: row.finished_at,
 		status: row.status,
 		paused_reason: row.paused_reason,
+		channel: row.channel === "sms" ? "sms" : "whatsapp",
 		template_text: row.template_text,
 		media_path: row.media_path,
 		media_kind: row.media_kind,
@@ -115,6 +128,34 @@ function toCampaignDto(row: Campaign): CampaignDTO {
 		skipped_count: row.skipped_count,
 		pending_count: row.pending_count,
 	};
+}
+
+async function toSmsConnectionDto(): Promise<SmsConnectionDTO> {
+	const mock = isSmsMockMode();
+	const state = readSmsRelayState();
+	const channel = getMessageChannel("sms");
+	const ready = await channel.isReady();
+	let online: boolean | null = null;
+	if (mock || state.status === "paired") {
+		const health = await fetchSmsDeviceHealth().catch(() => null);
+		online = health?.online ?? (mock ? true : null);
+	}
+	return {
+		mode: mock ? "mock" : "live",
+		ready,
+		status: mock ? "paired" : state.status,
+		deviceId: mock ? "mock-device" : state.deviceId,
+		online,
+		relayBaseUrl: resolveSmsRelayBaseUrl(state),
+		pairId: state.pairId,
+		pairExpiresAt: state.pairExpiresAt,
+	};
+}
+
+function normalizeChannelParam(
+	channel: MessageChannelKind | undefined,
+): MessageChannelKind {
+	return channel === "sms" ? "sms" : "whatsapp";
 }
 
 function toContactDto(
@@ -444,19 +485,34 @@ const mainRPC = BrowserView.defineRPC<MainRPC>({
 					attempts: getAttempts(id).map(toAttemptDto),
 				};
 			},
-			createCampaign: ({ name, templateText }) =>
+			createCampaign: ({ name, templateText, channel }) =>
 				toCampaignDto(
 					createCampaign({
 						name: name.trim() || "Untitled campaign",
 						templateText: templateText ?? "",
+						channel: normalizeChannelParam(channel),
 					}),
 				),
-			updateCampaign: ({ id, name, templateText, sourceFilename }) => {
-				requireCampaign(id);
+			updateCampaign: ({ id, name, templateText, sourceFilename, channel }) => {
+				const current = requireCampaign(id);
+				if (channel !== undefined && current.status !== "draft") {
+					throw new Error("Channel can only be changed while the campaign is a draft");
+				}
+				if (channel === "sms" && current.media_kind !== "none") {
+					clearCampaignMedia(id);
+				}
 				const updated = updateCampaign(id, {
 					name,
 					templateText,
 					sourceFilename,
+					...(channel !== undefined
+						? {
+								channel: normalizeChannelParam(channel),
+								...(channel === "sms"
+									? { mediaPath: null as string | null, mediaKind: "none" as const }
+									: {}),
+							}
+						: {}),
 				});
 				if (!updated) throw new Error(`Campaign not found: ${id}`);
 				return toCampaignDto(updated);
@@ -517,7 +573,10 @@ const mainRPC = BrowserView.defineRPC<MainRPC>({
 				text: renderTemplate(template, fields),
 			}),
 			setCampaignMedia: ({ campaignId, filename, base64 }) => {
-				requireCampaign(campaignId);
+				const campaign = requireCampaign(campaignId);
+				if (campaign.channel === "sms") {
+					throw new Error("SMS campaigns are text-only — media is not supported");
+				}
 				const kind = detectKind(filename);
 				if (kind === "none") {
 					throw new Error("Unsupported media type. Use image or video.");
@@ -595,6 +654,17 @@ const mainRPC = BrowserView.defineRPC<MainRPC>({
 				}
 				notifyDashboard();
 				return toSettingsDto(getAllSettings());
+			},
+
+			getSmsConnection: async () => toSmsConnectionDto(),
+			startSmsPair: async () => startSmsPairing(),
+			refreshSmsPairStatus: async () => {
+				await refreshSmsPairStatus();
+				return toSmsConnectionDto();
+			},
+			unpairSms: async () => {
+				await unpairSms();
+				return toSmsConnectionDto();
 			},
 
 			exportCampaign: ({ id }) => ({ csv: exportCampaignCsv(id) }),
