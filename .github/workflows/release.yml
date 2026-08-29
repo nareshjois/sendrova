@@ -151,7 +151,7 @@ jobs:
           ls -la release-assets/
 
       - name: Upload desktop workflow artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: desktop-windows
           path: release-assets/*
@@ -241,7 +241,7 @@ jobs:
           echo "ANDROID_APK_NAME=Sendrova-SMS-${VERSION}.apk" >> "$GITHUB_ENV"
 
       - name: Upload Android workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: android-apk
           path: release-assets/Sendrova-SMS-*.apk
