@@ -61,7 +61,7 @@ sendrova://sms-pair?u=<url-encoded-relay-base>&pairId=<id>&secret=<secret>
 | --- | --- |
 | Emulator | `http://10.0.2.2:8787` |
 | Physical phone on same Wi‑Fi | `http://<your-PC-LAN-IP>:8787` (not `127.0.0.1`) |
-| Deployed Worker | `https://…workers.dev` |
+| Deployed Worker | `https://sendrova.nareshjois.com` |
 
 Cleartext HTTP is allowed via `network_security_config` for local wrangler.
 

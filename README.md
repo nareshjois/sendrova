@@ -39,7 +39,7 @@ bun install
 bun run start
 ```
 
-Root scripts proxy into `@sendrova/desktop` via Turbo. Desktop SMS uses the built-in relay at `https://sendrova-sms-relay.naresh-jois.workers.dev`. For local Worker development only, optionally set `SMS_RELAY_BASE_URL=http://127.0.0.1:8787`.
+Root scripts proxy into `@sendrova/desktop` via Turbo. Desktop SMS uses the built-in relay at `https://sendrova.nareshjois.com`. For local Worker development only, optionally set `SMS_RELAY_BASE_URL=http://127.0.0.1:8787`.
 
 ## Turbo / workspace commands
 
@@ -81,7 +81,7 @@ cd apps/android && gradlew.bat assembleDebug
 
      Deploy without the secret fails closed (Worker returns 500 until `TOKEN_SIGNING_KEY` is set).
 
-2. **Desktop relay URL:** built-in — `https://sendrova-sms-relay.naresh-jois.workers.dev` (no trailing slash). Optional local override: `SMS_RELAY_BASE_URL=http://127.0.0.1:8787` when using `wrangler dev`.
+2. **Desktop relay URL:** built-in — `https://sendrova.nareshjois.com` (no trailing slash). Optional local override: `SMS_RELAY_BASE_URL=http://127.0.0.1:8787` when using `wrangler dev`.
 
 3. **Build / sideload the Android APK** — see [`apps/android/README.md`](./apps/android/README.md). Open `apps/android` in Android Studio, `assembleDebug`, `adb install`. Physical phone on the same network (or use the deployed Worker HTTPS URL).
 

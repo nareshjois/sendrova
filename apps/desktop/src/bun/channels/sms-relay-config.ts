@@ -3,7 +3,7 @@
  * Production desktop always uses this unless overridden for local wrangler.
  */
 export const SMS_RELAY_PRODUCTION_BASE_URL =
-	"https://sendrova-sms-relay.naresh-jois.workers.dev";
+	"https://sendrova.nareshjois.com";
 
 /** Explicit mock / offline unit-test mode (no network). */
 export function isSmsRelayMockEnv(): boolean {

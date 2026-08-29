@@ -12,7 +12,7 @@ Android build/sideload: [`apps/android/README.md`](../../apps/android/README.md)
 - [ ] Relay reachable (`cp .dev.vars.example .dev.vars` then `wrangler dev`, or deployed Worker with `wrangler secret put TOKEN_SIGNING_KEY`)
 - [ ] R2 bucket bound (`SMS_BUCKET` / `sendrova-sms`)
 - [ ] Android debug APK installed on a physical phone with SMS + USB debugging (or deploy Worker HTTPS so the phone can reach it)
-- [ ] Desktop uses the built-in Worker URL (or optional `SMS_RELAY_BASE_URL` for local wrangler; no trailing slash)
+- [ ] Desktop uses the built-in Worker URL `https://sendrova.nareshjois.com` (or optional `SMS_RELAY_BASE_URL` for local wrangler; no trailing slash)
 - [ ] Two consented test contacts (or one contact + a second dry-run for WA)
 
 ## Relay health (optional curl)
