@@ -1,6 +1,6 @@
 # @sendrova/relay
 
-Cloudflare Worker that relays SMS jobs between Sendrova desktop and an Android phone gateway. Storage is R2 (`SMS_BUCKET`); tokens are HMAC-signed with `TOKEN_SIGNING_KEY`.
+Cloudflare Worker that relays SMS jobs between Sendrova desktop and an Android phone gateway. Storage is R2 (`SMS_BUCKET`); tokens are HMAC-signed with `TOKEN_SIGNING_KEY`. Static marketing assets under `public/` are served for non-API paths (landing page at `/`); `/health` and `/v1/*` stay on the relay handlers.
 
 Contract source of truth: [`packages/sms-relay-api`](../../packages/sms-relay-api) (OpenAPI + QR + R2 layout). This README documents **implementation defaults** for ambiguities left open by the frozen contract.
 

@@ -18,13 +18,20 @@ import type { Env } from "./types";
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
 		try {
+			const url = new URL(request.url);
+			const path = url.pathname.replace(/\/+$/, "") || "/";
+
+			if (!isApiPath(path)) {
+				return env.ASSETS.fetch(request);
+			}
+
 			if (!env.TOKEN_SIGNING_KEY) {
 				return json(
 					{ error: { code: "INTERNAL", message: "TOKEN_SIGNING_KEY not configured" } },
 					500,
 				);
 			}
-			return await route(request, env);
+			return await route(request, env, path);
 		} catch (err) {
 			return errorResponse(err);
 		}
@@ -43,9 +50,15 @@ export default {
 	},
 };
 
-async function route(request: Request, env: Env): Promise<Response> {
-	const url = new URL(request.url);
-	const path = url.pathname.replace(/\/+$/, "") || "/";
+function isApiPath(path: string): boolean {
+	return path === "/health" || path === "/v1" || path.startsWith("/v1/");
+}
+
+async function route(
+	request: Request,
+	env: Env,
+	path: string,
+): Promise<Response> {
 	const method = request.method.toUpperCase();
 
 	if (method === "OPTIONS") {
