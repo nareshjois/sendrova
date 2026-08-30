@@ -24,8 +24,8 @@ android {
         applicationId = "dev.sendrova.sms"
         minSdk = 26
         targetSdk = 34
-        versionCode = 11003
-        versionName = "1.1.3"
+        versionCode = 11004
+        versionName = "1.1.4"
     }
 
     signingConfigs {

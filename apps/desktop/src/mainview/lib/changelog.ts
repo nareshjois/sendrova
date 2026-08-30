@@ -5,6 +5,14 @@ export const CHANGELOG_ENTRIES: Array<{
 	items: string[];
 }> = [
 	{
+		version: "1.1.4",
+		date: "2026-08-30",
+		items: [
+			"Normalize desktop + landing colors to the app-icon palette",
+			"Landing redesign: brand-first hero, icon logo/favicon, parallax motion",
+		],
+	},
+	{
 		version: "1.1.3",
 		date: "2026-08-30",
 		items: [
