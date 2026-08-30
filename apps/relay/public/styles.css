@@ -167,10 +167,19 @@ body {
 }
 
 .hero-logo {
+	display: block;
 	width: min(100%, 28rem);
 	height: auto;
-	filter: drop-shadow(0 0 48px rgb(19 222 253 / 0.22))
-		drop-shadow(0 24px 48px rgb(6 70 223 / 0.35));
+	aspect-ratio: 1;
+	object-fit: cover;
+	/* Squircle / continuous-corner frame over the icon’s white square */
+	border-radius: 24%;
+	corner-shape: squircle;
+	overflow: hidden;
+	background: var(--brand-white);
+	box-shadow:
+		0 0 48px rgb(19 222 253 / 0.22),
+		0 24px 48px rgb(6 70 223 / 0.35);
 }
 
 .hero-copy {
@@ -296,7 +305,7 @@ body {
 	display: grid;
 	grid-template-columns: minmax(8rem, 12rem) 1fr;
 	gap: 1rem 1.5rem;
-	padding: 1.15rem 0;
+	padding: 1.35rem 0;
 	border-bottom: 1px solid var(--line);
 }
 
@@ -307,6 +316,7 @@ body {
 }
 
 .feature-list span {
+	max-width: 40rem;
 	color: var(--mist);
 }
 
