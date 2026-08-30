@@ -122,10 +122,27 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      # Hutch packs with `tar`. Git Bash's GNU tar treats D:\paths as remote hosts
+      # ("Cannot connect to D: resolve failed"). Prefer Windows System32 bsdtar.
+      - name: Prefer Windows bsdtar over Git GNU tar
+        shell: pwsh
+        run: |
+          $sysTar = Join-Path $env:SystemRoot "System32\tar.exe"
+          if (-not (Test-Path $sysTar)) {
+            throw "Windows bsdtar missing at $sysTar"
+          }
+          $shim = Join-Path $env:RUNNER_TEMP "bsdtar-shim"
+          New-Item -ItemType Directory -Force -Path $shim | Out-Null
+          Copy-Item -Force $sysTar (Join-Path $shim "tar.exe")
+          Add-Content -Path $env:GITHUB_PATH -Value $shim
+          Write-Host "Shimmed tar -> $sysTar"
+
       - name: Build Electrobun (${{ needs.resolve.outputs.channel }})
         shell: bash
         run: |
           set -euo pipefail
+          echo "Using tar: $(command -v tar)"
+          tar --version | head -n 1
           CHANNEL="${{ needs.resolve.outputs.channel }}"
           if [[ "${CHANNEL}" == "stable" ]]; then
             bun run build:stable
