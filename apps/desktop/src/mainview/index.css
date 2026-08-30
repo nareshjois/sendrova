@@ -36,29 +36,30 @@
 }
 
 :root {
-	--background: oklch(0.96 0.01 75);
-	--foreground: oklch(0.22 0.02 250);
-	--card: oklch(0.99 0.005 75);
-	--card-foreground: oklch(0.22 0.02 250);
-	--popover: oklch(0.99 0.005 75);
-	--popover-foreground: oklch(0.22 0.02 250);
-	--primary: oklch(0.42 0.08 195);
-	--primary-foreground: oklch(0.98 0.01 195);
-	--secondary: oklch(0.93 0.015 75);
-	--secondary-foreground: oklch(0.28 0.02 250);
-	--muted: oklch(0.94 0.01 75);
-	--muted-foreground: oklch(0.48 0.02 250);
-	--accent: oklch(0.92 0.02 195);
-	--accent-foreground: oklch(0.32 0.06 195);
-	--destructive: oklch(0.55 0.18 25);
-	--destructive-foreground: oklch(0.98 0.01 25);
-	--warning: oklch(0.72 0.14 75);
-	--warning-foreground: oklch(0.28 0.06 75);
-	--success: oklch(0.5 0.1 165);
-	--success-foreground: oklch(0.98 0.01 165);
-	--border: oklch(0.88 0.015 75);
-	--input: oklch(0.88 0.015 75);
-	--ring: oklch(0.5 0.08 195);
+	/* brand palette v1.1.4 — keep in sync with apps/relay/public/styles.css */
+	--background: #eaf0fb;
+	--foreground: #070b24;
+	--card: #f5f8ff;
+	--card-foreground: #070b24;
+	--popover: #f5f8ff;
+	--popover-foreground: #070b24;
+	--primary: #0646df;
+	--primary-foreground: #ffffff;
+	--secondary: #dbe6f8;
+	--secondary-foreground: #0c1440;
+	--muted: #e2eaf8;
+	--muted-foreground: #4a5a80;
+	--accent: #d7f8ff; /* cyan wash from #13DEFD */
+	--accent-foreground: #050c77;
+	--destructive: #dc2626;
+	--destructive-foreground: #ffffff;
+	--warning: #eab308;
+	--warning-foreground: #1c1917;
+	--success: #14b751;
+	--success-foreground: #ffffff;
+	--border: #c5d4f0;
+	--input: #c5d4f0;
+	--ring: #0d72f4;
 	--radius: 0.625rem;
 	--titlebar-height: 2.25rem;
 }
@@ -77,8 +78,8 @@
 	body {
 		@apply bg-background text-foreground font-sans antialiased;
 		background-image:
-			radial-gradient(ellipse 80% 50% at 10% -10%, oklch(0.9 0.03 195 / 0.45), transparent),
-			radial-gradient(ellipse 60% 40% at 100% 0%, oklch(0.92 0.02 75 / 0.5), transparent);
+			radial-gradient(ellipse 80% 50% at 10% -10%, rgb(19 222 253 / 0.18), transparent),
+			radial-gradient(ellipse 60% 40% at 100% 0%, rgb(13 114 244 / 0.14), transparent);
 	}
 }
 
