@@ -8,38 +8,58 @@
 			name="description"
 			content="Sendrova runs paced WhatsApp and SMS campaigns on your machine. Local data, daily caps, phone gateway."
 		/>
+		<link rel="icon" href="/favicon.ico" sizes="any" />
+		<link rel="icon" type="image/png" href="/favicon-32x32.png" sizes="32x32" />
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 		<link
-			href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;700;800&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap"
+			href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&display=swap"
 			rel="stylesheet"
 		/>
 		<link rel="stylesheet" href="/styles.css" />
 	</head>
 	<body>
-		<div class="atmosphere" aria-hidden="true"></div>
+		<div class="atmosphere" aria-hidden="true">
+			<span class="atmosphere-layer" data-parallax="far"></span>
+			<span class="atmosphere-layer" data-parallax="mid"></span>
+			<span class="atmosphere-layer" data-parallax="near"></span>
+			<span class="speed-lines"></span>
+		</div>
 
 		<main class="shell">
 			<header class="hero">
-				<p class="brand">Sendrova</p>
-				<h1 class="headline">Paced campaigns on your machine.</h1>
-				<p class="lede">
-					Connect WhatsApp and an SMS phone gateway, then run consented outreach with
-					templates, pacing, and daily caps — data stays local.
-				</p>
-				<div class="cta">
-					<a
-						class="btn btn-primary"
-						href="https://github.com/nareshjois/sendrova/releases/latest/download/win-x64-Sendrova-Setup.zip"
-					>
-						Download for Windows
-					</a>
-					<a
-						class="btn btn-secondary"
-						href="https://github.com/nareshjois/sendrova/releases/latest/download/Sendrova-SMS-1.1.3.apk"
-					>
-						Android SMS gateway
-					</a>
+				<div class="hero-visual" data-parallax="logo">
+					<img
+						class="hero-logo"
+						src="/brand/icon.png"
+						width="512"
+						height="512"
+						alt=""
+						decoding="async"
+					/>
+				</div>
+				<div class="hero-copy">
+					<p class="brand">Sendrova</p>
+					<h1 class="headline">Paced campaigns on your machine.</h1>
+					<p class="lede">
+						Connect WhatsApp and an SMS phone gateway, then run consented outreach
+						with templates, pacing, and daily caps — data stays local.
+					</p>
+					<div class="cta">
+						<a
+							class="btn btn-primary"
+							href="https://github.com/nareshjois/sendrova/releases/latest/download/win-x64-Sendrova-Setup.zip"
+						>
+							Download for Windows
+						</a>
+						<a
+							class="btn btn-secondary"
+							href="https://github.com/nareshjois/sendrova/releases/latest/download/Sendrova-SMS-1.1.4.apk"
+						>
+							Android SMS gateway
+						</a>
+					</div>
 				</div>
 			</header>
 
@@ -82,5 +102,6 @@
 				</p>
 			</footer>
 		</main>
+		<script src="/landing.js" defer></script>
 	</body>
 </html>
