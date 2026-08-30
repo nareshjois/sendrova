@@ -28,7 +28,7 @@ describe("SMS relay Worker", () => {
 		expect(home.headers.get("content-type") ?? "").toMatch(/text\/html/);
 		const html = await home.text();
 		expect(html).toContain("Sendrova");
-		expect(html).toContain("stable-win-x64-Sendrova-Setup.zip");
+		expect(html).toContain("win-x64-Sendrova-Setup.zip");
 		expect(html).toContain("Sendrova-SMS-1.0.0.apk");
 
 		const health = await SELF.fetch("http://localhost/health");
