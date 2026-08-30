@@ -29,7 +29,7 @@ describe("SMS relay Worker", () => {
 		const html = await home.text();
 		expect(html).toContain("Sendrova");
 		expect(html).toContain("win-x64-Sendrova-Setup.zip");
-		expect(html).toContain("Sendrova-SMS-1.1.3.apk");
+		expect(html).toContain("Sendrova-SMS-1.1.4.apk");
 
 		const health = await SELF.fetch("http://localhost/health");
 		expect(health.status).toBe(200);

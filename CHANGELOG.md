@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.4 — 2026-08-30
+
+- Normalize desktop + landing colors to the app-icon palette
+- Landing redesign: brand-first hero, icon logo/favicon, parallax motion
+
 ## 1.1.3 — 2026-08-30
 
 - Fix Windows titlebar controls (min/max/close) for Electrobun 2 (`hiddenInset`)
