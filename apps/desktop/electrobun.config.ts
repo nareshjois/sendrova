@@ -1,4 +1,4 @@
-import type { ElectrobunConfig } from "electrobun/bun";
+import type { ElectrobunConfig } from "electrobun";
 import {
 	APP_IDENTIFIER,
 	APP_NAME,
@@ -13,16 +13,17 @@ export default {
 		version: APP_VERSION,
 	},
 	build: {
-		useAsar: true,
+		// Lowest-risk bridge from Electrobun 1.x Bun main process.
+		mainProcess: "bun",
 		bun: {
 			entrypoint: "src/bun/index.ts",
-			// Bundle Baileys into the app entry — ASAR externals fail to resolve at runtime.
+			// Bundle Baileys into the app entry — externals fail to resolve at runtime.
 			external: [],
 		},
 		views: {},
 		copy: {
 			"dist/index.html": "views/mainview/index.html",
-			"dist/assets/": "views/mainview/assets/",
+			"dist/assets": "views/mainview/assets",
 		},
 		watchIgnore: ["dist/**"],
 		mac: {

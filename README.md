@@ -108,7 +108,9 @@ Platform sources under `apps/desktop` (edit these, then optionally `bun run icon
 
 **Desktop releases are Windows-only for now** (plus the Android SMS APK on the same GitHub Release). mac/linux icon paths stay configured for later; do not expect mac/linux Electrobun update pipelines yet.
 
-Electrobun 1.16's Windows CLI hardcodes a CI path to `rcedit` (`D:\a\electrobun\...`), so `bun add rcedit` alone does not fix icon embedding. Desktop scripts run `embed:win-icon` first, which uses the project's `rcedit` dependency to stamp `build.win.icon` onto Electrobun's `launcher.exe` / `bun.exe` / `extractor.exe` templates before the Electrobun copy step. Electrobun may still log a warn (baked path), but shipped binaries already carry the icon. See `apps/desktop/scripts/embed-win-icon.ts` and [electrobun#429](https://github.com/blackboardsh/electrobun/issues/429).
+Desktop is on **Electrobun 2.x** (Hutch build tooling). The Windows icon comes from `build.win.icon` in `apps/desktop/electrobun.config.ts` — no separate `rcedit` / embed workaround.
+
+**Upgrading from Electrobun 1.16 installs:** do **not** rely on in-app auto-update from 1.16 → 2.x. Download a fresh Setup ZIP from [Releases](https://github.com/nareshjois/sendrova/releases) and install over the previous version (user data under `~/.sendrova` is preserved).
 
 ## Download Windows + Android (GitHub Releases)
 
@@ -116,7 +118,7 @@ Prebuilt installs ship from [GitHub Releases](https://github.com/nareshjois/send
 
 | Asset | What it is |
 | --- | --- |
-| `{canary\|stable}-win-x64-Sendrova-Setup-*.zip` | Windows Setup ZIP — extract `Sendrova-Setup-*.exe` and run |
+| `win-x64-Sendrova-Setup.zip` | Windows Setup ZIP — extract `Sendrova-Setup.exe` and run (Electrobun 2 / Hutch) |
 | `{canary\|stable}-win-x64-update.json` (+ matching `.tar.zst`) | Desktop auto-update payloads (leave names unchanged) |
 | `Sendrova-SMS-<version>.apk` | Android SMS gateway (**signed release** — sideload with `adb install`) |
 

@@ -12,11 +12,11 @@
 #   - Stable:  v1.0.0, v1.0.1, …
 #   - Canary:  v1.0.0-canary.1, v1.0.1-canary.1, …
 #
-# Artifacts (Electrobun names preserved — do not rename for auto-update):
-#   {channel}-win-x64-Sendrova-Setup-{channel}.zip
-#   {channel}-win-x64-Sendrova-{channel}.tar.zst   (canary) / stable equivalent
+# Artifacts (Electrobun 2 / Hutch names — do not rename for auto-update):
+#   {channel}-win-x64-Sendrova.tar.zst
 #   {channel}-win-x64-update.json
-#   Sendrova-SMS-<version>.apk   (signed release; version from apps/android versionName)
+#   {channel}-win-x64-*.patch          (optional)
+#   win-x64-Sendrova-Setup.zip         (first-install Setup; channel-agnostic name)
 #
 # Notes:
 #   - Windows builds are unsigned → SmartScreen warnings expected (see README).
@@ -140,7 +140,10 @@ jobs:
           CHANNEL="${{ needs.resolve.outputs.channel }}"
           mkdir -p release-assets
           shopt -s nullglob
+          # Channel-prefixed updater payloads (update.json, tar.zst, patch)
           files=(apps/desktop/artifacts/"${CHANNEL}"-win-x64-*)
+          # Hutch 2.x Setup zip is channel-agnostic: win-x64-Sendrova-Setup.zip
+          setup=(apps/desktop/artifacts/win-x64-Sendrova-Setup.zip)
           if [[ ${#files[@]} -eq 0 ]]; then
             echo "::error::No Electrobun artifacts under apps/desktop/artifacts/${CHANNEL}-win-x64-*"
             ls -la apps/desktop/artifacts || true
@@ -148,6 +151,11 @@ jobs:
             exit 1
           fi
           cp -v "${files[@]}" release-assets/
+          if [[ ${#setup[@]} -gt 0 ]]; then
+            cp -v "${setup[@]}" release-assets/
+          else
+            echo "::warning::Missing win-x64-Sendrova-Setup.zip (first-install asset)"
+          fi
           ls -la release-assets/
 
       - name: Upload desktop workflow artifacts
