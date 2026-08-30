@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.3 — 2026-08-30
+
+- Fix Windows titlebar controls (min/max/close) for Electrobun 2 (`hiddenInset`)
+- About: clearer auto-update status (loading vs not configured vs release host)
+- Changelog history through 1.1.x in About
+
 ## 1.1.2 — 2026-08-30
 
 - Windows release CI: build Electrobun/Hutch packs with System32 bsdtar via pwsh

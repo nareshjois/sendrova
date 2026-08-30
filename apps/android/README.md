@@ -4,7 +4,7 @@ Sendrova SMS phone gateway — thin Kotlin app that pairs to the Cloudflare Work
 
 Contract source of truth: [`packages/sms-relay-api`](../../packages/sms-relay-api) (`openapi.yaml`, `qr-payload.md`).
 
-**Version:** `1.1.2` (`versionName`) / `versionCode` `11002` — aligned with desktop stable baseline.
+**Version:** `1.1.3` (`versionName`) / `versionCode` `11003` — aligned with desktop stable baseline.
 
 ## Requirements
 
@@ -30,7 +30,7 @@ gradlew.bat assembleDebug
 
 Debug APK: `app/build/outputs/apk/debug/app-debug.apk`
 
-CI publishes a **signed release** APK as **`Sendrova-SMS-1.1.2.apk`** (version from `versionName`) on [GitHub Releases](https://github.com/nareshjois/sendrova/releases). Prefer the Release asset for sideload unless you are iterating on the Kotlin app.
+CI publishes a **signed release** APK as **`Sendrova-SMS-1.1.3.apk`** (version from `versionName`) on [GitHub Releases](https://github.com/nareshjois/sendrova/releases). Prefer the Release asset for sideload unless you are iterating on the Kotlin app.
 
 ### Sideload
 

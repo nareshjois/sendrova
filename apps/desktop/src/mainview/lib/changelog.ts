@@ -5,6 +5,15 @@ export const CHANGELOG_ENTRIES: Array<{
 	items: string[];
 }> = [
 	{
+		version: "1.1.3",
+		date: "2026-08-30",
+		items: [
+			"Fix Windows titlebar controls (min/max/close) for Electrobun 2 (hiddenInset)",
+			"About: clearer auto-update status (loading vs not configured vs release host)",
+			"Changelog history through 1.1.x in About",
+		],
+	},
+	{
 		version: "1.1.2",
 		date: "2026-08-30",
 		items: [
