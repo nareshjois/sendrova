@@ -109,9 +109,13 @@ export function AboutPage({
 				</CardHeader>
 				<CardContent className="space-y-3">
 					<p className="text-sm text-muted-foreground">
-						{info?.updatesConfigured
-							? `Checking ${info.baseUrl || "configured release host"}`
-							: "Auto-update is not configured. Set GITHUB_REPO in shared/release-config.ts, rebuild stable, and publish Electrobun artifacts to GitHub Releases."}
+						{!info
+							? "Loading update configuration…"
+							: info.updatesConfigured
+								? info.channel === "dev"
+									? `Dev channel — auto-update is disabled. Stable builds check ${info.baseUrl || "GitHub Releases"}.`
+									: `Release host: ${info.baseUrl || "configured"}`
+								: "Auto-update is not configured. Set GITHUB_REPO in packages/shared/release-config.ts, rebuild stable, and publish Electrobun artifacts to GitHub Releases."}
 					</p>
 					<div className="flex flex-wrap gap-2">
 						<Button size="sm" disabled={busy} onClick={() => void handleCheck()}>

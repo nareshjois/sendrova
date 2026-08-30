@@ -88,10 +88,11 @@
 	user-select: none;
 }
 
+/* WebView2 NonClientRegionSupport: no-drag must cover icons/SVGs inside buttons. */
 .window-controls,
-.window-controls button {
-	-webkit-app-region: no-drag;
-	app-region: no-drag;
+.window-controls * {
+	-webkit-app-region: no-drag !important;
+	app-region: no-drag !important;
 }
 
 @keyframes status-pulse {

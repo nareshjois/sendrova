@@ -2,22 +2,47 @@ import { electrobun } from "@/lib/electrobun";
 import { cn } from "@/lib/utils";
 import appIcon from "@/assets/app-icon.png";
 import { Minus, Square, X } from "lucide-react";
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties, type SyntheticEvent } from "react";
 
 const showCustomControls =
 	typeof navigator !== "undefined" &&
 	!/Macintosh|Mac OS X/i.test(navigator.userAgent);
+
+const noDragStyle = {
+	WebkitAppRegion: "no-drag",
+	appRegion: "no-drag",
+} as CSSProperties;
+
+async function callWindowControl(
+	fn: () => Promise<unknown> | unknown,
+): Promise<void> {
+	const rpc = electrobun.rpc;
+	if (!rpc) {
+		console.warn("[titlebar] RPC not ready");
+		return;
+	}
+	try {
+		await fn();
+	} catch (err) {
+		console.error("[titlebar] window control failed", err);
+	}
+}
 
 export function Titlebar() {
 	const [maximized, setMaximized] = useState(false);
 
 	useEffect(() => {
 		if (!showCustomControls) return;
-		electrobun.rpc?.request
-			.isWindowMaximized({})
-			.then((r) => setMaximized(r.maximized))
-			.catch(() => undefined);
+		void callWindowControl(async () => {
+			const r = await electrobun.rpc!.request.isWindowMaximized({});
+			setMaximized(r.maximized);
+		});
 	}, []);
+
+	function stopDragPropagation(e: SyntheticEvent) {
+		// Keep WebView2 / Electrobun drag-region hit testing off the control buttons.
+		e.stopPropagation();
+	}
 
 	return (
 		<header
@@ -43,35 +68,53 @@ export function Titlebar() {
 			{showCustomControls && (
 				<nav
 					className="window-controls electrobun-webkit-app-region-no-drag flex items-center gap-0.5"
-					style={
-						{ WebkitAppRegion: "no-drag", appRegion: "no-drag" } as CSSProperties
-					}
+					style={noDragStyle}
+					onMouseDown={stopDragPropagation}
+					onPointerDown={stopDragPropagation}
 				>
 					<button
 						type="button"
 						aria-label="Minimize"
-						className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95"
-						onClick={() => void electrobun.rpc?.request.minimizeWindow({})}
+						className="electrobun-webkit-app-region-no-drag inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95"
+						style={noDragStyle}
+						onMouseDown={stopDragPropagation}
+						onPointerDown={stopDragPropagation}
+						onClick={() =>
+							void callWindowControl(() =>
+								electrobun.rpc!.request.minimizeWindow({}),
+							)
+						}
 					>
 						<Minus className="size-3.5" strokeWidth={2} />
 					</button>
 					<button
 						type="button"
 						aria-label={maximized ? "Restore" : "Maximize"}
-						className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95"
-						onClick={() => {
-							void electrobun.rpc?.request.maximizeWindow({}).then((r) => {
+						className="electrobun-webkit-app-region-no-drag inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground active:scale-95"
+						style={noDragStyle}
+						onMouseDown={stopDragPropagation}
+						onPointerDown={stopDragPropagation}
+						onClick={() =>
+							void callWindowControl(async () => {
+								const r = await electrobun.rpc!.request.maximizeWindow({});
 								setMaximized(r.maximized);
-							});
-						}}
+							})
+						}
 					>
 						<Square className="size-3" strokeWidth={2} />
 					</button>
 					<button
 						type="button"
 						aria-label="Close"
-						className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive active:scale-95"
-						onClick={() => void electrobun.rpc?.request.closeWindow({})}
+						className="electrobun-webkit-app-region-no-drag inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/15 hover:text-destructive active:scale-95"
+						style={noDragStyle}
+						onMouseDown={stopDragPropagation}
+						onPointerDown={stopDragPropagation}
+						onClick={() =>
+							void callWindowControl(() =>
+								electrobun.rpc!.request.closeWindow({}),
+							)
+						}
 					>
 						<X className="size-3.5" strokeWidth={2} />
 					</button>
