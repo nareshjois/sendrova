@@ -383,17 +383,20 @@ startDailyCapWatch();
 let mainWindow: BrowserWindow;
 
 async function resolveAppInfo(): Promise<AppInfoDTO> {
-	const configured = Boolean(releaseBaseUrl());
+	const fallbackBaseUrl = releaseBaseUrl();
+	const configured = Boolean(fallbackBaseUrl);
 	try {
-		const local = await Updater.getLocallocalInfo();
+		// Electrobun 2: getLocalInfo (getLocallocalInfo is a deprecated alias).
+		const local = await Updater.getLocalInfo();
+		const baseUrl = (local.baseUrl || fallbackBaseUrl).trim();
 		return {
 			name: local.name || APP_NAME,
 			version: local.version || APP_VERSION,
 			channel: local.channel || "dev",
 			identifier: local.identifier || APP_IDENTIFIER,
-			baseUrl: local.baseUrl || releaseBaseUrl(),
-			updatesConfigured:
-				configured && Boolean(local.baseUrl || releaseBaseUrl()),
+			baseUrl,
+			// GITHUB_REPO → releaseBaseUrl is enough; version.json baseUrl is preferred when present.
+			updatesConfigured: Boolean(baseUrl),
 			platform: process.platform,
 		};
 	} catch {
@@ -402,7 +405,7 @@ async function resolveAppInfo(): Promise<AppInfoDTO> {
 			version: APP_VERSION,
 			channel: "dev",
 			identifier: APP_IDENTIFIER,
-			baseUrl: releaseBaseUrl(),
+			baseUrl: fallbackBaseUrl,
 			updatesConfigured: configured,
 			platform: process.platform,
 		};
@@ -698,10 +701,12 @@ const mainRPC = BrowserView.defineRPC<MainRPC>({
 			exportCampaign: ({ id }) => ({ csv: exportCampaignCsv(id) }),
 
 			minimizeWindow: () => {
+				if (!mainWindow) throw new Error("Main window is not ready");
 				mainWindow.minimize();
 				return { ok: true as const };
 			},
 			maximizeWindow: () => {
+				if (!mainWindow) throw new Error("Main window is not ready");
 				if (mainWindow.isMaximized()) {
 					mainWindow.unmaximize();
 					return { maximized: false };
@@ -710,10 +715,14 @@ const mainRPC = BrowserView.defineRPC<MainRPC>({
 				return { maximized: true };
 			},
 			closeWindow: () => {
+				if (!mainWindow) throw new Error("Main window is not ready");
 				mainWindow.close();
 				return { ok: true as const };
 			},
-			isWindowMaximized: () => ({ maximized: mainWindow.isMaximized() }),
+			isWindowMaximized: () => {
+				if (!mainWindow) return { maximized: false };
+				return { maximized: mainWindow.isMaximized() };
+			},
 
 			getAppInfo: () => resolveAppInfo(),
 			checkForUpdate: () => runUpdateCheck(),
@@ -782,7 +791,12 @@ onProgress((progress) => {
 mainWindow = new BrowserWindow({
 	title: "Sendrova",
 	url: await getMainViewUrl(),
-	titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "hidden",
+	// Electrobun 2 / Windows: "hidden" uses WS_POPUP and breaks min/max/close + frame
+	// chrome. "hiddenInset" keeps WS_CAPTION|THICKFRAME (caption stripped via NCCALCSIZE),
+	// enables NonClientRegionSupport / Aero Snap, and lets custom titlebar RPC work.
+	// @see https://github.com/blackboardsh/electrobun/pull/363
+	// @see https://github.com/blackboardsh/electrobun/issues/395
+	titleBarStyle: "hiddenInset",
 	frame: {
 		width: 1280,
 		height: 860,
