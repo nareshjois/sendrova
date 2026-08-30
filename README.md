@@ -152,7 +152,7 @@ Electrobun does not code-sign Windows builds, and Sendrova does not ship a paid 
 
 **Optional (skip the Setup EXE):** run the app folder from a canary/stable build (`build/*-win-x64/Sendrova-*/bin/launcher`) or the matching `*-Sendrova-*.tar.zst` artifact. SmartScreen may still warn; same **More info → Run anyway** path. Self-signed certificates do not improve SmartScreen and are not used here.
 
-**Android:** install `Sendrova-SMS-1.1.1.apk` (or the matching version) via `adb install -r …` (or file manager sideload). Grant SMS (+ Camera for QR). APKs on Releases are **signed** with the project release keystore (see [`apps/android/README.md`](./apps/android/README.md)).
+**Android:** install `Sendrova-SMS-1.1.2.apk` (or the matching version) via `adb install -r …` (or file manager sideload). Grant SMS (+ Camera for QR). APKs on Releases are **signed** with the project release keystore (see [`apps/android/README.md`](./apps/android/README.md)).
 
 ## CI releases (tag push)
 

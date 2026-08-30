@@ -122,33 +122,40 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      # Hutch packs with `tar`. Git Bash's GNU tar treats D:\paths as remote hosts
-      # ("Cannot connect to D: resolve failed"). Prefer Windows System32 bsdtar.
-      - name: Prefer Windows bsdtar over Git GNU tar
+      # Hutch packs with `tar`. Git's GNU tar treats D:\paths as remote hosts
+      # ("Cannot connect to D: resolve failed"). Build in pwsh with System32
+      # bsdtar first and Git usr/bin stripped — GITHUB_PATH shims lose to bash /usr/bin.
+      - name: Build Electrobun (${{ needs.resolve.outputs.channel }})
         shell: pwsh
         run: |
-          $sysTar = Join-Path $env:SystemRoot "System32\tar.exe"
+          $ErrorActionPreference = 'Stop'
+          $sys32 = Join-Path $env:SystemRoot 'System32'
+          $sysTar = Join-Path $sys32 'tar.exe'
           if (-not (Test-Path $sysTar)) {
             throw "Windows bsdtar missing at $sysTar"
           }
-          $shim = Join-Path $env:RUNNER_TEMP "bsdtar-shim"
-          New-Item -ItemType Directory -Force -Path $shim | Out-Null
-          Copy-Item -Force $sysTar (Join-Path $shim "tar.exe")
-          Add-Content -Path $env:GITHUB_PATH -Value $shim
-          Write-Host "Shimmed tar -> $sysTar"
-
-      - name: Build Electrobun (${{ needs.resolve.outputs.channel }})
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "Using tar: $(command -v tar)"
-          tar --version | head -n 1
-          CHANNEL="${{ needs.resolve.outputs.channel }}"
-          if [[ "${CHANNEL}" == "stable" ]]; then
+          $filtered = @(
+            $env:Path -split ';' |
+              Where-Object {
+                $_ -and
+                ($_ -notmatch '(?i)[\\/]Git[\\/]usr[\\/]bin') -and
+                ($_ -notmatch '(?i)[\\/]Git[\\/]mingw64[\\/]bin') -and
+                ($_ -notmatch '(?i)[\\/]Git[\\/]cmd')
+              }
+          )
+          $env:Path = (@($sys32) + $filtered) -join ';'
+          $tarCmd = Get-Command tar -ErrorAction Stop
+          Write-Host "Using tar: $($tarCmd.Source)"
+          & tar --version
+          if ($tarCmd.Source -notlike "*\System32\tar.exe") {
+            throw "Expected System32 bsdtar, got $($tarCmd.Source)"
+          }
+          $channel = '${{ needs.resolve.outputs.channel }}'
+          if ($channel -eq 'stable') {
             bun run build:stable
-          else
+          } else {
             bun run build:canary
-          fi
+          }
 
       - name: Stage desktop artifacts
         shell: bash
